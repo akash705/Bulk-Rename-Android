@@ -4,16 +4,22 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.lifecycle.SavedStateHandle
 import com.bulkrenamer.data.model.FileNode
+import com.bulkrenamer.data.model.RenameResult
 import com.bulkrenamer.data.model.RenameRule
 import com.bulkrenamer.data.repository.FileSystemRepository
 import com.bulkrenamer.domain.BrowseFilesUseCase
+import com.bulkrenamer.domain.RenameFilesUseCase
+import com.bulkrenamer.domain.UndoOperationUseCase
+import com.bulkrenamer.domain.UndoResult
+import com.bulkrenamer.service.RenameProgressState
 import com.bulkrenamer.ui.state.FileExplorerUiState
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -32,7 +38,11 @@ class FileExplorerViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var browseFiles: BrowseFilesUseCase
     private lateinit var repository: FileSystemRepository
+    private lateinit var renameFilesUseCase: RenameFilesUseCase
+    private lateinit var undoOperation: UndoOperationUseCase
     private lateinit var savedStateHandle: SavedStateHandle
+
+    private val progressFlow = MutableStateFlow<RenameProgressState>(RenameProgressState.Idle)
 
     private fun testUri(path: String = "test"): Uri {
         val uri = mockk<Uri>(relaxed = true)
@@ -58,12 +68,16 @@ class FileExplorerViewModelTest {
         Dispatchers.setMain(testDispatcher)
         browseFiles = mockk()
         repository = mockk()
+        renameFilesUseCase = mockk()
+        undoOperation = mockk()
         savedStateHandle = SavedStateHandle()
 
         coEvery { repository.getStalePermissions() } returns emptyList()
         coEvery { repository.getGrantedUriCount() } returns 0
         coEvery { repository.isNearUriQuota() } returns false
         coEvery { repository.persistUriPermission(any()) } returns Unit
+
+        every { renameFilesUseCase.progress } returns progressFlow
     }
 
     @After
@@ -72,7 +86,9 @@ class FileExplorerViewModelTest {
     }
 
     private fun createViewModel(): FileExplorerViewModel =
-        FileExplorerViewModel(browseFiles, repository, savedStateHandle)
+        FileExplorerViewModel(browseFiles, repository, renameFilesUseCase, undoOperation, savedStateHandle)
+
+    // ── Browse / nav tests ───────────────────────────────────────────────────────
 
     @Test
     fun `initial state emits PermissionRequired when no URIs granted`() = runTest {
@@ -271,5 +287,102 @@ class FileExplorerViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value is FileExplorerUiState.PermissionRequired)
+    }
+
+    // ── Rename execution tests ───────────────────────────────────────────────────
+
+    @Test
+    fun `confirmRename transitions through RenameInProgress to RenameResult`() = runTest {
+        val folderUri = testUri("folder")
+        val files = listOf(fileNode("a.jpg"), fileNode("b.jpg"))
+        coEvery { browseFiles(folderUri) } returns files
+        coEvery { repository.getGrantedUriCount() } returns 1
+
+        val vm = createViewModel()
+        vm.onFolderGranted(folderUri)
+        advanceUntilIdle()
+        vm.selectAll()
+        advanceUntilIdle()
+        vm.previewRename(RenameRule.AddPrefix("new_"))
+        advanceUntilIdle()
+
+        val previewState = vm.uiState.value as FileExplorerUiState.RenamePreviewing
+
+        coEvery { renameFilesUseCase.executeBatch(any()) } returns listOf(
+            RenameResult(testUri("a.jpg"), "a.jpg", "new_a.jpg", testUri("new_a.jpg"), null),
+            RenameResult(testUri("b.jpg"), "b.jpg", "new_b.jpg", testUri("new_b.jpg"), null)
+        )
+
+        vm.confirmRename(previewState)
+        advanceUntilIdle()
+
+        val result = vm.uiState.value
+        assertTrue(result is FileExplorerUiState.RenameResult)
+        val renameResult = result as FileExplorerUiState.RenameResult
+        assertEquals(2, renameResult.successCount)
+        assertEquals(0, renameResult.failureCount)
+        assertTrue(renameResult.errors.isEmpty())
+    }
+
+    @Test
+    fun `confirmRename records partial failures in RenameResult`() = runTest {
+        val folderUri = testUri("folder")
+        val files = listOf(fileNode("a.jpg"), fileNode("b.jpg"))
+        coEvery { browseFiles(folderUri) } returns files
+        coEvery { repository.getGrantedUriCount() } returns 1
+
+        val vm = createViewModel()
+        vm.onFolderGranted(folderUri)
+        advanceUntilIdle()
+        vm.selectAll()
+        advanceUntilIdle()
+        vm.previewRename(RenameRule.AddPrefix("new_"))
+        advanceUntilIdle()
+
+        val previewState = vm.uiState.value as FileExplorerUiState.RenamePreviewing
+
+        coEvery { renameFilesUseCase.executeBatch(any()) } returns listOf(
+            RenameResult(testUri("a.jpg"), "a.jpg", "new_a.jpg", testUri("new_a.jpg"), null),
+            RenameResult(testUri("b.jpg"), "b.jpg", "new_b.jpg", null, Exception("Permission denied"))
+        )
+
+        vm.confirmRename(previewState)
+        advanceUntilIdle()
+
+        val result = vm.uiState.value as FileExplorerUiState.RenameResult
+        assertEquals(1, result.successCount)
+        assertEquals(1, result.failureCount)
+        assertEquals("b.jpg", result.errors.first().originalName)
+    }
+
+    @Test
+    fun `undoLastBatch delegates to UndoOperationUseCase and reloads folder`() = runTest {
+        val folderUri = testUri("folder")
+        coEvery { browseFiles(folderUri) } returns emptyList()
+        coEvery { repository.getGrantedUriCount() } returns 1
+        coEvery { undoOperation.undoBatch("batch-x") } returns UndoResult(
+            batchId = "batch-x", reversedCount = 2, skippedCount = 0, failedCount = 0
+        )
+
+        val vm = createViewModel()
+        vm.onFolderGranted(folderUri)
+        advanceUntilIdle()
+
+        vm.undoLastBatch("batch-x")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { undoOperation.undoBatch("batch-x") }
+        // After undo, folder is reloaded → state should be Browsing
+        assertTrue(vm.uiState.value is FileExplorerUiState.Browsing)
+    }
+
+    @Test
+    fun `cancelRename calls cancel on use case`() {
+        val vm = createViewModel()
+        every { renameFilesUseCase.cancel() } returns Unit
+
+        vm.cancelRename()
+
+        io.mockk.verify(exactly = 1) { renameFilesUseCase.cancel() }
     }
 }

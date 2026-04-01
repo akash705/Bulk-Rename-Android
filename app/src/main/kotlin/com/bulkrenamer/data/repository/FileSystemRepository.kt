@@ -3,7 +3,6 @@ package com.bulkrenamer.data.repository
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.DocumentsContract
-import androidx.documentfile.provider.DocumentFile
 import com.bulkrenamer.data.db.GrantedUriDao
 import com.bulkrenamer.data.db.GrantedUriEntity
 import com.bulkrenamer.data.model.FileNode
@@ -68,13 +67,35 @@ class FileSystemRepository @Inject constructor(
 
     /**
      * Rename a document. Returns the new URI on success (old URI is dead after rename).
-     * Returns null if the provider returns null or the document is not found.
+     * Returns null on failure.
+     *
+     * Uses DocumentsContract directly rather than DocumentFile — avoids needing a Context
+     * and reduces the IPC surface to a single call.
      */
     suspend fun renameDocument(uri: Uri, newName: String): Uri? = withContext(Dispatchers.IO) {
-        val doc = DocumentFile.fromSingleUri(contentResolver.run { this }, uri)
-            ?: return@withContext null
-        // DocumentFile.renameTo() calls DocumentsContract.renameDocument() internally
-        doc.renameTo(newName)?.uri
+        try {
+            DocumentsContract.renameDocument(contentResolver, uri, newName)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Query the current display name of a document without renaming it.
+     * Returns null if the URI is no longer valid (document moved, deleted, or renamed by another batch).
+     */
+    suspend fun getDocumentDisplayName(uri: Uri): String? = withContext(Dispatchers.IO) {
+        try {
+            contentResolver.query(
+                uri,
+                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun persistUriPermission(uri: Uri) = withContext(Dispatchers.IO) {

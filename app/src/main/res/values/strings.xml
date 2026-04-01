@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bulk Renamer</string>
+    <string name="notification_channel_name">Rename Progress</string>
+    <string name="notification_channel_desc">Shows progress of bulk rename operations</string>
+</resources>

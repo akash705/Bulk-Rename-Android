@@ -4,6 +4,8 @@ import android.content.ContentResolver
 import android.content.Context
 import androidx.room.Room
 import com.bulkrenamer.data.db.AppDatabase
+import com.bulkrenamer.data.db.GrantedUriDao
+import com.bulkrenamer.data.db.RenameJournalDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,4 +30,12 @@ object AppModule {
     @Singleton
     fun provideContentResolver(@ApplicationContext context: Context): ContentResolver =
         context.contentResolver
+
+    @Provides
+    @Singleton
+    fun provideRenameJournalDao(db: AppDatabase): RenameJournalDao = db.renameJournalDao()
+
+    @Provides
+    @Singleton
+    fun provideGrantedUriDao(db: AppDatabase): GrantedUriDao = db.grantedUriDao()
 }

@@ -7,13 +7,20 @@ import androidx.lifecycle.viewModelScope
 import com.bulkrenamer.data.model.RenameRule
 import com.bulkrenamer.data.repository.FileSystemRepository
 import com.bulkrenamer.domain.BrowseFilesUseCase
+import com.bulkrenamer.domain.RenameFilesUseCase
+import com.bulkrenamer.domain.RenameOperation
+import com.bulkrenamer.domain.UndoOperationUseCase
 import com.bulkrenamer.domain.computePreview
+import com.bulkrenamer.service.RenameProgressState
 import com.bulkrenamer.ui.state.FileExplorerUiState
+import com.bulkrenamer.ui.state.RenameError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 private const val KEY_NAV_STACK = "nav_stack"
@@ -22,6 +29,8 @@ private const val KEY_NAV_STACK = "nav_stack"
 class FileExplorerViewModel @Inject constructor(
     private val browseFiles: BrowseFilesUseCase,
     private val fileSystemRepository: FileSystemRepository,
+    private val renameFilesUseCase: RenameFilesUseCase,
+    private val undoOperation: UndoOperationUseCase,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -152,6 +161,82 @@ class FileExplorerViewModel @Inject constructor(
             rule = rule,
             selectedCount = selectedFiles.size
         )
+    }
+
+    fun confirmRename(previewingState: FileExplorerUiState.RenamePreviewing) {
+        val batchId = UUID.randomUUID().toString()
+
+        val ops = previewingState.previewItems
+            .filter { !it.isUnchanged && it.validationError == null }
+            .map { item ->
+                RenameOperation(
+                    uri = item.fileNode.uri,
+                    originalName = item.fileNode.name,
+                    newName = item.proposedName,
+                    batchId = batchId
+                )
+            }
+
+        if (ops.isEmpty()) {
+            backToBrowsing()
+            return
+        }
+
+        viewModelScope.launch {
+            // Set initial in-progress state so the progress dialog appears immediately
+            _uiState.value = FileExplorerUiState.RenameInProgress(
+                total = ops.size,
+                completed = 0,
+                currentFileName = ops.first().originalName,
+                batchId = batchId
+            )
+
+            // Track per-file progress from the use case's StateFlow
+            val progressJob = launch {
+                renameFilesUseCase.progress
+                    .filterIsInstance<RenameProgressState.InProgress>()
+                    .collect { p ->
+                        _uiState.value = FileExplorerUiState.RenameInProgress(
+                            total = p.total,
+                            completed = p.completed,
+                            currentFileName = p.currentFileName,
+                            batchId = p.batchId
+                        )
+                    }
+            }
+
+            val results = renameFilesUseCase.executeBatch(ops)
+            progressJob.cancel()
+
+            val errors = results
+                .filter { !it.isSuccess }
+                .map { result ->
+                    RenameError(
+                        originalName = result.originalName,
+                        newName = result.newName,
+                        reason = result.error?.message ?: "Unknown error"
+                    )
+                }
+
+            _uiState.value = FileExplorerUiState.RenameResult(
+                successCount = results.count { it.isSuccess },
+                failureCount = errors.size,
+                errors = errors,
+                batchId = batchId
+            )
+        }
+    }
+
+    fun cancelRename() {
+        renameFilesUseCase.cancel()
+    }
+
+    fun undoLastBatch(batchId: String) {
+        viewModelScope.launch {
+            undoOperation.undoBatch(batchId)
+            // Reload folder after undo so filenames update in the list
+            backToBrowsing()
+        }
     }
 
     fun backToBrowsing() {

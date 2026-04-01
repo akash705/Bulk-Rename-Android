@@ -1,0 +1,50 @@
+[
+  {
+    "title": "Smart Selection by Predicate (Inversion of Manual Selection)",
+    "summary": "Instead of tapping each file, users define selection criteria upfront (e.g., 'all .jpg files', 'files modified in last 7 days', 'files matching pattern *_old*'). The app auto-selects matching files, then shows the count. Users only deselect outliers instead of selecting 50+ files.",
+    "why_it_matters": "Eliminates the tedium of one-by-one selection. Shifts from an additive (select all) to a subtractive (deselect exceptions) model, which requires fewer taps and is psychologically lighter.",
+    "grounding": "Users with 50+ files spend minutes just selecting. Predicates like 'extension=jpg' or 'size>100MB' are common mental filters they already use—just not captured by the UI."
+  },
+  {
+    "title": "Permission Pre-flight as a Non-Blocking Warning (Removal of Friction Point)",
+    "summary": "Run permission checks in the background as files are selected or in the preview. Flag files with warnings (e.g., 'Read-only', 'No write permission') directly in the preview table with a yellow icon. Allow users to proceed anyway and catch errors only at commit time, rather than blocking upfront.",
+    "why_it_matters": "Removes the blocking step of checking permissions before previewing. Users see the risk inline and can make an informed choice without extra dialog boxes.",
+    "grounding": "Checking permissions before rename is a friction point that halts workflow. If warnings are visible in preview, users don't need a separate permission-check phase."
+  },
+  {
+    "title": "Pattern Templates Library (Automation of Repetitive Patterns)",
+    "summary": "Pre-build a library of common renaming patterns: 'Remove spaces', 'Lowercase all', 'Prefix with date', 'Numbering (001, 002...)', 'Remove suffix', 'Replace underscores with spaces'. Users tap a template, tweak if needed, and apply. Patterns are auto-saved as favorites.",
+    "why_it_matters": "Eliminates the need to write or learn regex/pattern syntax. Users reuse templates across batches, reducing cognitive load and time-to-rename.",
+    "grounding": "Writing custom patterns from scratch is a barrier. Most bulk renaming tasks follow standard patterns (remove spaces, add prefixes, numbering)—these should be one-tap defaults."
+  },
+  {
+    "title": "Inline Preview Editing (Removal of Preview-Commit Cycle)",
+    "summary": "Allow users to edit the 'new name' directly in the preview table for any file, cascading changes to similar files if they match the same pattern rule. Edits are live and reflected immediately. No separate preview-commit dialog—tap 'Apply All' once satisfied.",
+    "why_it_matters": "Collapses the preview-commit cycle into a single, continuous editing experience. Users can refine and tweak in one place rather than bouncing between preview and dialog.",
+    "grounding": "The preview-commit cycle adds mental switching costs. If editing is inline, users stay in one mental model and finish faster."
+  },
+  {
+    "title": "Safe Rename Constraints (Automation of Risk Detection)",
+    "summary": "The app automatically detects file extensions and enforces a constraint: 'Never change extensions unless explicitly opted in.' Provide a toggle 'Allow extension changes' that defaults OFF. Show a visual indicator (e.g., red brackets around extension) so users always see what's protected.",
+    "why_it_matters": "Eliminates the risk of accidental corruption. Users can rename recklessly without fear of breaking file types. Removes the cognitive burden of 'which parts are safe to change.'",
+    "grounding": "File extension corruption is common because users don't know safe vs. unsafe changes. A hard constraint with clear visual marking removes this entire class of errors."
+  },
+  {
+    "title": "Batch History & Undo (Automation of Reversibility)",
+    "summary": "After each bulk rename, store the mapping (old→new) in a local history with a timestamp. Allow users to undo the last batch with one tap, or roll back to any previous state. Show a 'Recently Undone' section for quick re-access.",
+    "why_it_matters": "Removes the fear of making mistakes. Users can experiment boldly knowing they can revert instantly. Eliminates the need to triple-check before committing.",
+    "grounding": "The preview-commit cycle exists partly because users are afraid of errors. If undo is instant and trustworthy, they can skip the paranoid review step."
+  },
+  {
+    "title": "Smart Extension Suggestion (Inversion of Manual Learning)",
+    "summary": "When a user selects files, the app analyzes the extensions in the batch and suggests safe operations: 'Batch is all .jpg files—safe to rename body', 'Mixed extensions detected—extension changes disabled', etc. Show a one-line tip in the UI.",
+    "why_it_matters": "Teaches users what is safe without requiring them to learn. Removes the learning barrier while giving confidence in decisions.",
+    "grounding": "Users don't know regex or safe/unsafe changes. Proactive, contextual tips based on the current batch educate in the moment and build confidence."
+  },
+  {
+    "title": "Regex-Free Pattern Builder (Automation of Syntax Barrier)",
+    "summary": "Provide a visual, no-code pattern builder: click 'Insert Prefix', 'Insert Date', 'Remove Word', 'Add Suffix', etc. Build patterns by stacking UI blocks rather than typing regex. Show a live preview of the pattern in plain English (e.g., 'Keep first 5 chars + add date + keep extension').",
+    "why_it_matters": "Completely removes the regex learning curve. Users who can't write regex can still build complex patterns. Dramatically lowers the barrier to advanced renaming.",
+    "grounding": "Learning regex is a massive barrier. A visual builder with plain-English previews lets non-technical users access advanced features without syntax knowledge."
+  }
+]

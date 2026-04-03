@@ -63,7 +63,10 @@ private fun FileExplorerRoot(
             RenamePreviewScreen(
                 state = uiState,
                 onConfirm = { viewModel.confirmRename(uiState) },
-                onBack = { viewModel.backToBrowsing() }
+                onBack = { viewModel.backToBrowsing() },
+                onCopyModeChange = { viewModel.setCopyMode(it) },
+                onGlobalStrategyChange = { viewModel.setGlobalConflictStrategy(it) },
+                onItemStrategyChange = { docId, strategy -> viewModel.setItemConflictStrategy(docId, strategy) }
             )
         }
 

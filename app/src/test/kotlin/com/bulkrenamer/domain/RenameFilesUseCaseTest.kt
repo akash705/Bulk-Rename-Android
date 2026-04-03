@@ -71,7 +71,7 @@ class RenameFilesUseCaseTest {
             op("b.jpg", "new_b.jpg", batchId),
             op("c.jpg", "new_c.jpg", batchId)
         )
-        ops.forEach { coEvery { repository.renameFile("/test/${it.originalName}", it.newName) } returns "/test/${it.newName}" }
+        ops.forEach { coEvery { repository.renameFile("/test/${it.originalName}", it.newName, any()) } returns "/test/${it.newName}" }
 
         val results = useCase.executeBatch(ops)
 
@@ -90,11 +90,11 @@ class RenameFilesUseCaseTest {
             op("d.jpg", "4.jpg", batchId),
             op("e.jpg", "5.jpg", batchId)
         )
-        coEvery { repository.renameFile("/test/a.jpg", any()) } returns "/test/1.jpg"
-        coEvery { repository.renameFile("/test/b.jpg", any()) } returns "/test/2.jpg"
-        coEvery { repository.renameFile("/test/c.jpg", any()) } returns null  // failure
-        coEvery { repository.renameFile("/test/d.jpg", any()) } returns "/test/4.jpg"
-        coEvery { repository.renameFile("/test/e.jpg", any()) } returns "/test/5.jpg"
+        coEvery { repository.renameFile("/test/a.jpg", any(), any()) } returns "/test/1.jpg"
+        coEvery { repository.renameFile("/test/b.jpg", any(), any()) } returns "/test/2.jpg"
+        coEvery { repository.renameFile("/test/c.jpg", any(), any()) } returns null  // failure
+        coEvery { repository.renameFile("/test/d.jpg", any(), any()) } returns "/test/4.jpg"
+        coEvery { repository.renameFile("/test/e.jpg", any(), any()) } returns "/test/5.jpg"
 
         val results = useCase.executeBatch(ops)
 
@@ -111,7 +111,7 @@ class RenameFilesUseCaseTest {
     fun `all files fail — 0 successes, 0 journal entries`() = runTest {
         val batchId = "batch-003"
         val ops = listOf(op("a.jpg", "1.jpg", batchId), op("b.jpg", "2.jpg", batchId))
-        ops.forEach { coEvery { repository.renameFile("/test/${it.originalName}", any()) } returns null }
+        ops.forEach { coEvery { repository.renameFile("/test/${it.originalName}", any(), any()) } returns null }
 
         val results = useCase.executeBatch(ops)
 
@@ -124,7 +124,7 @@ class RenameFilesUseCaseTest {
     fun `progress emits correct states through batch`() = runTest {
         val batchId = "batch-004"
         val ops = listOf(op("x.jpg", "y.jpg", batchId))
-        coEvery { repository.renameFile("/test/x.jpg", any()) } returns "/test/y.jpg"
+        coEvery { repository.renameFile("/test/x.jpg", any(), any()) } returns "/test/y.jpg"
 
         val progressValues = mutableListOf<RenameProgressState>()
         val job = launch {
@@ -144,12 +144,12 @@ class RenameFilesUseCaseTest {
         val ops = (1..5).map { op("file$it.jpg", "new$it.jpg", batchId) }
 
         // File 1 renames and then we cancel
-        coEvery { repository.renameFile("/test/file1.jpg", any()) } answers {
+        coEvery { repository.renameFile("/test/file1.jpg", any(), any()) } answers {
             useCase.cancel()
             "/test/new1.jpg"
         }
         ops.drop(1).forEach {
-            coEvery { repository.renameFile("/test/${it.originalName}", any()) } returns "/test/${it.newName}"
+            coEvery { repository.renameFile("/test/${it.originalName}", any(), any()) } returns "/test/${it.newName}"
         }
 
         val results = useCase.executeBatch(ops)

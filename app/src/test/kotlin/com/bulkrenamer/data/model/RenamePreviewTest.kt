@@ -2,6 +2,7 @@ package com.bulkrenamer.data.model
 
 import android.net.Uri
 import android.provider.DocumentsContract
+import com.bulkrenamer.domain.ConflictStrategy
 import com.bulkrenamer.domain.computePreview
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
@@ -148,5 +149,92 @@ class RenamePreviewTest {
         val result = computePreview(files, emptyList())
         assertTrue(result[0].isUnchanged)
         assertTrue(result[1].isUnchanged)
+    }
+
+    // Conflict strategy tests
+
+    @Test fun `overwrite strategy keeps raw proposed name on conflict`() {
+        val files = listOf(fileNode("a.jpg"))
+        val existing = setOf("new.jpg")
+        val result = computePreview(
+            files,
+            listOf(RenameRule.SetBaseName("new")),
+            existingNamesInFolder = existing,
+            defaultStrategy = ConflictStrategy.OVERWRITE
+        )
+        assertEquals("new.jpg", result[0].proposedName)
+        assertTrue(result[0].hasConflict)
+        assertEquals(ConflictStrategy.OVERWRITE, result[0].conflictStrategy)
+    }
+
+    @Test fun `skip strategy marks item as skipped and keeps raw name`() {
+        val files = listOf(fileNode("a.jpg"))
+        val existing = setOf("new.jpg")
+        val result = computePreview(
+            files,
+            listOf(RenameRule.SetBaseName("new")),
+            existingNamesInFolder = existing,
+            defaultStrategy = ConflictStrategy.SKIP
+        )
+        assertEquals("new.jpg", result[0].proposedName)
+        assertTrue(result[0].hasConflict)
+        assertTrue(result[0].isSkipped)
+        assertEquals(ConflictStrategy.SKIP, result[0].conflictStrategy)
+    }
+
+    @Test fun `auto-rename is default and still resolves suffix`() {
+        val files = listOf(fileNode("a.jpg"))
+        val existing = setOf("new.jpg")
+        val result = computePreview(
+            files,
+            listOf(RenameRule.SetBaseName("new")),
+            existingNamesInFolder = existing,
+            defaultStrategy = ConflictStrategy.AUTO_RENAME
+        )
+        assertEquals("new_1.jpg", result[0].proposedName)
+        assertTrue(result[0].hasConflict)
+        assertEquals(ConflictStrategy.AUTO_RENAME, result[0].conflictStrategy)
+    }
+
+    @Test fun `per-item strategy overrides global for that item`() {
+        val fileA = fileNode("a.jpg")
+        val fileB = fileNode("b.jpg")
+        val existing = setOf("new.jpg", "new_1.jpg")
+        val result = computePreview(
+            listOf(fileA, fileB),
+            listOf(RenameRule.SetBaseName("new")),
+            existingNamesInFolder = existing,
+            defaultStrategy = ConflictStrategy.AUTO_RENAME,
+            perItemStrategies = mapOf(fileA.documentId to ConflictStrategy.OVERWRITE)
+        )
+        // fileA uses OVERWRITE — keeps raw name
+        assertEquals("new.jpg", result[0].proposedName)
+        assertEquals(ConflictStrategy.OVERWRITE, result[0].conflictStrategy)
+        // fileB uses global AUTO_RENAME — resolves to next available
+        assertEquals("new_2.jpg", result[1].proposedName)
+        assertEquals(ConflictStrategy.AUTO_RENAME, result[1].conflictStrategy)
+    }
+
+    @Test fun `skipped item blocks subsequent items from claiming its original name`() {
+        val fileA = fileNode("a.jpg")
+        val fileB = fileNode("b.jpg")
+        // existing has "new.jpg"; fileA will be skipped (stays at a.jpg),
+        // fileB tries to rename to "a.jpg" — should conflict because fileA stays there
+        val result = computePreview(
+            listOf(fileA, fileB),
+            listOf(RenameRule.SetBaseName("new")),
+            existingNamesInFolder = setOf("new.jpg"),
+            defaultStrategy = ConflictStrategy.SKIP
+        )
+        // Both conflict with "new.jpg" — both skipped
+        assertTrue(result[0].isSkipped)
+        assertTrue(result[1].isSkipped)
+    }
+
+    @Test fun `non-conflicting item has no strategy set`() {
+        val files = listOf(fileNode("a.jpg"))
+        val result = computePreview(files, listOf(RenameRule.AddPrefix("2024_")))
+        assertFalse(result[0].hasConflict)
+        assertEquals(ConflictStrategy.AUTO_RENAME, result[0].conflictStrategy)
     }
 }

@@ -13,5 +13,9 @@ local.properties
 # Kotlin compiler
 .kotlin/
 
+# Signing credentials — never commit these
+keystore/
+keystore.properties
+
 # OS
 .DS_Store

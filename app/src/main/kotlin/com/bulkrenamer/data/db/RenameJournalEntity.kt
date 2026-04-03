@@ -13,7 +13,8 @@ data class RenameJournalEntity(
     val newUri: String,
     val newName: String,
     val timestamp: Long,
-    val undone: Boolean = false
+    val undone: Boolean = false,
+    val isCopy: Boolean = false
 )
 
 // FTS4 virtual table for full-text search on filenames.

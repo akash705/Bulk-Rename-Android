@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase
         RenameJournalEntity::class,
         RenameJournalFtsEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

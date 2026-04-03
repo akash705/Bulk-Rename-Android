@@ -46,8 +46,14 @@ class UndoOperationUseCase @Inject constructor(
                 continue
             }
 
-            val resultPath = repository.renameFile(newPath, entry.originalName)
-            if (resultPath != null) reversedCount++ else failedCount++
+            if (entry.isCopy) {
+                // Undo a copy = delete the copy; original was never touched
+                val deleted = repository.deleteFile(newPath)
+                if (deleted) reversedCount++ else failedCount++
+            } else {
+                val resultPath = repository.renameFile(newPath, entry.originalName)
+                if (resultPath != null) reversedCount++ else failedCount++
+            }
         }
 
         journalDao.markBatchAsUndone(batchId)

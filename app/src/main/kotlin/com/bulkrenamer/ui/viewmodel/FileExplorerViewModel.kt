@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.bulkrenamer.data.model.RenameRule
 import com.bulkrenamer.data.repository.FileSystemRepository
 import com.bulkrenamer.domain.BrowseFilesUseCase
+import com.bulkrenamer.domain.ConflictStrategy
 import com.bulkrenamer.domain.RenameFilesUseCase
 import com.bulkrenamer.domain.RenameOperation
 import com.bulkrenamer.domain.UndoOperationUseCase
@@ -58,6 +59,10 @@ class FileExplorerViewModel @Inject constructor(
     private var currentFilter: FileFilter = FileFilter.ALL
     private var showHiddenFiles: Boolean = false
     private var rawEntries: List<com.bulkrenamer.data.model.FileNode> = emptyList()
+
+    // Cached inputs for re-running preview when conflict strategy changes
+    private var cachedSelectedFiles: List<com.bulkrenamer.data.model.FileNode> = emptyList()
+    private var cachedNonSelectedNames: Set<String> = emptySet()
 
     init {
         viewModelScope.launch {
@@ -257,6 +262,9 @@ class FileExplorerViewModel @Inject constructor(
             .map { it.name }
             .toSet()
 
+        cachedSelectedFiles = selectedFiles
+        cachedNonSelectedNames = nonSelectedNames
+
         val preview = computePreview(selectedFiles, rules, nonSelectedNames)
         _uiState.value = FileExplorerUiState.RenamePreviewing(
             previewItems = preview,
@@ -265,17 +273,52 @@ class FileExplorerViewModel @Inject constructor(
         )
     }
 
+    fun setCopyMode(createCopy: Boolean) {
+        val previewing = _uiState.value as? FileExplorerUiState.RenamePreviewing ?: return
+        _uiState.value = previewing.copy(createCopy = createCopy)
+    }
+
+    fun setGlobalConflictStrategy(strategy: ConflictStrategy) {
+        val previewing = _uiState.value as? FileExplorerUiState.RenamePreviewing ?: return
+        val preview = computePreview(
+            cachedSelectedFiles,
+            previewing.rules,
+            cachedNonSelectedNames,
+            strategy
+        )
+        _uiState.value = previewing.copy(previewItems = preview, globalConflictStrategy = strategy)
+    }
+
+    fun setItemConflictStrategy(documentId: String, strategy: ConflictStrategy) {
+        val previewing = _uiState.value as? FileExplorerUiState.RenamePreviewing ?: return
+        val perItemStrategies = previewing.previewItems
+            .filter { it.hasConflict }
+            .associate { it.fileNode.documentId to it.conflictStrategy }
+            .toMutableMap()
+        perItemStrategies[documentId] = strategy
+        val preview = computePreview(
+            cachedSelectedFiles,
+            previewing.rules,
+            cachedNonSelectedNames,
+            previewing.globalConflictStrategy,
+            perItemStrategies
+        )
+        _uiState.value = previewing.copy(previewItems = preview)
+    }
+
     fun confirmRename(previewingState: FileExplorerUiState.RenamePreviewing) {
         val batchId = UUID.randomUUID().toString()
 
         val ops = previewingState.previewItems
-            .filter { !it.isUnchanged && it.validationError == null }
+            .filter { !it.isUnchanged && !it.isSkipped && it.validationError == null }
             .map { item ->
                 RenameOperation(
                     uri = item.fileNode.uri,
                     originalName = item.fileNode.name,
                     newName = item.proposedName,
-                    batchId = batchId
+                    batchId = batchId,
+                    overwrite = item.conflictStrategy == ConflictStrategy.OVERWRITE,
+                    createCopy = previewingState.createCopy
                 )
             }
 

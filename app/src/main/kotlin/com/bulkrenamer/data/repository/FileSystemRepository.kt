@@ -7,6 +7,8 @@ import com.bulkrenamer.data.model.FileNode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,14 +27,39 @@ class FileSystemRepository @Inject constructor() {
      * Rename [absolutePath] to [newName] within the same directory.
      * Returns the new absolute path on success, null on failure.
      */
-    suspend fun renameFile(absolutePath: String, newName: String): String? = withContext(Dispatchers.IO) {
+    suspend fun renameFile(absolutePath: String, newName: String, overwrite: Boolean = false): String? = withContext(Dispatchers.IO) {
         try {
             val src = File(absolutePath)
             val dst = File(src.parentFile!!, newName)
+            if (overwrite && dst.exists()) dst.delete()
             if (src.renameTo(dst)) dst.absolutePath else null
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Creates a copy of [absolutePath] with [newName] in the same directory.
+     * Returns the new absolute path on success, null on failure.
+     */
+    suspend fun copyFile(absolutePath: String, newName: String, overwrite: Boolean = false): String? = withContext(Dispatchers.IO) {
+        try {
+            val src = File(absolutePath)
+            val dst = File(src.parentFile!!, newName)
+            val options = if (overwrite) arrayOf(StandardCopyOption.REPLACE_EXISTING) else emptyArray()
+            Files.copy(src.toPath(), dst.toPath(), *options)
+            dst.absolutePath
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Deletes the file at [absolutePath]. Used for undo of copy operations.
+     * Returns true on success.
+     */
+    suspend fun deleteFile(absolutePath: String): Boolean = withContext(Dispatchers.IO) {
+        try { File(absolutePath).delete() } catch (_: Exception) { false }
     }
 
     /**

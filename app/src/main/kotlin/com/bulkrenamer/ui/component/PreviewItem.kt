@@ -9,20 +9,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.bulkrenamer.domain.ConflictStrategy
 import com.bulkrenamer.domain.RenamePreviewItem
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PreviewItemRow(
     item: RenamePreviewItem,
+    onStrategyChange: ((ConflictStrategy) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val hasIssue = item.hasConflict || item.validationError != null
@@ -60,6 +65,9 @@ fun PreviewItemRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = when {
                     item.validationError != null -> MaterialTheme.colorScheme.error
+                    item.isSkipped -> MaterialTheme.colorScheme.onSurfaceVariant
+                    item.hasConflict && item.conflictStrategy == ConflictStrategy.OVERWRITE ->
+                        MaterialTheme.colorScheme.error
                     item.hasConflict -> MaterialTheme.colorScheme.tertiary
                     isUnchanged -> MaterialTheme.colorScheme.onSurfaceVariant
                     else -> MaterialTheme.colorScheme.primary
@@ -80,20 +88,44 @@ fun PreviewItemRow(
             }
         }
 
-        if (item.validationError != null) {
-            Text(
-                text = item.validationError,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 2.dp, start = 32.dp)
-            )
-        } else if (item.hasConflict) {
-            Text(
-                text = "Conflict resolved",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.padding(top = 2.dp, start = 32.dp)
-            )
+        when {
+            item.validationError != null -> {
+                Text(
+                    text = item.validationError,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 2.dp, start = 32.dp)
+                )
+            }
+            item.hasConflict && onStrategyChange != null -> {
+                // Per-item conflict strategy chips
+                Row(
+                    modifier = Modifier
+                        .padding(top = 4.dp, start = 32.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ConflictStrategy.entries.forEach { strategy ->
+                        FilterChip(
+                            selected = item.conflictStrategy == strategy,
+                            onClick = { onStrategyChange(strategy) },
+                            label = { Text(strategy.label, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.padding(end = 4.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = when (strategy) {
+                                    ConflictStrategy.OVERWRITE -> MaterialTheme.colorScheme.errorContainer
+                                    ConflictStrategy.SKIP -> MaterialTheme.colorScheme.surfaceVariant
+                                    else -> MaterialTheme.colorScheme.secondaryContainer
+                                },
+                                selectedLabelColor = when (strategy) {
+                                    ConflictStrategy.OVERWRITE -> MaterialTheme.colorScheme.onErrorContainer
+                                    ConflictStrategy.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    else -> MaterialTheme.colorScheme.onSecondaryContainer
+                                }
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 }

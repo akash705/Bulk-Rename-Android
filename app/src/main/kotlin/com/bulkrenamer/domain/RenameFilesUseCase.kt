@@ -25,7 +25,9 @@ data class RenameOperation(
     val uri: Uri,          // file:// URI — uri.path gives the absolute path
     val originalName: String,
     val newName: String,
-    val batchId: String
+    val batchId: String,
+    val overwrite: Boolean = false,
+    val createCopy: Boolean = false
 ) : Parcelable
 
 @Singleton
@@ -78,8 +80,13 @@ class RenameFilesUseCase @Inject constructor(
                     }
 
                 try {
-                    val newPath = repository.renameFile(absolutePath, op.newName)
-                        ?: throw IOException("renameTo failed for '${op.originalName}'")
+                    val newPath = if (op.createCopy) {
+                        repository.copyFile(absolutePath, op.newName, op.overwrite)
+                            ?: throw IOException("copy failed for '${op.originalName}'")
+                    } else {
+                        repository.renameFile(absolutePath, op.newName, op.overwrite)
+                            ?: throw IOException("renameTo failed for '${op.originalName}'")
+                    }
 
                     val newUri = Uri.fromFile(File(newPath))
 
@@ -90,7 +97,8 @@ class RenameFilesUseCase @Inject constructor(
                             originalName = op.originalName,
                             newUri = newUri.toString(),
                             newName = op.newName,
-                            timestamp = System.currentTimeMillis()
+                            timestamp = System.currentTimeMillis(),
+                            isCopy = op.createCopy
                         )
                     )
 

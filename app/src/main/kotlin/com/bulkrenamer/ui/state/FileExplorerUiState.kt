@@ -2,6 +2,7 @@ package com.bulkrenamer.ui.state
 
 import com.bulkrenamer.data.model.FileNode
 import com.bulkrenamer.data.model.RenameRule
+import com.bulkrenamer.domain.ConflictStrategy
 import com.bulkrenamer.domain.RenamePreviewItem
 
 enum class SortField(val label: String) {
@@ -55,9 +56,14 @@ sealed class FileExplorerUiState {
     data class RenamePreviewing(
         val previewItems: List<RenamePreviewItem>,
         val rules: List<RenameRule>,
-        val selectedCount: Int
+        val selectedCount: Int,
+        val globalConflictStrategy: ConflictStrategy = ConflictStrategy.AUTO_RENAME,
+        val createCopy: Boolean = false
     ) : FileExplorerUiState() {
         val conflictCount: Int get() = previewItems.count { it.hasConflict }
+        val autoRenamedCount: Int get() = previewItems.count { it.hasConflict && it.conflictStrategy == ConflictStrategy.AUTO_RENAME }
+        val overwriteCount: Int get() = previewItems.count { it.hasConflict && it.conflictStrategy == ConflictStrategy.OVERWRITE }
+        val skippedCount: Int get() = previewItems.count { it.isSkipped }
         val errorCount: Int get() = previewItems.count { it.validationError != null }
         val unchangedCount: Int get() = previewItems.count { it.isUnchanged }
         val canConfirm: Boolean get() = errorCount == 0

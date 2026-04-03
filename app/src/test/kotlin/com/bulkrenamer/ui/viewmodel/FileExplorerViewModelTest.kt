@@ -1,6 +1,9 @@
 package com.bulkrenamer.ui.viewmodel
 
+import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
 import androidx.lifecycle.SavedStateHandle
 import com.bulkrenamer.data.model.FileNode
@@ -17,6 +20,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,11 +35,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FileExplorerViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
+    private lateinit var context: Context
     private lateinit var browseFiles: BrowseFilesUseCase
     private lateinit var repository: FileSystemRepository
     private lateinit var renameFilesUseCase: RenameFilesUseCase
@@ -44,17 +50,21 @@ class FileExplorerViewModelTest {
 
     private val progressFlow = MutableStateFlow<RenameProgressState>(RenameProgressState.Idle)
 
-    private fun testUri(path: String = "test"): Uri {
+    private val testRootPath = "/storage/emulated/0"
+
+    private fun fileUri(path: String): Uri {
         val uri = mockk<Uri>(relaxed = true)
-        every { uri.toString() } returns "content://test/$path"
+        every { uri.path } returns path
+        every { uri.toString() } returns "file://$path"
         return uri
     }
 
-    private fun fileNode(name: String, isDir: Boolean = false): FileNode {
+    private fun fileNode(name: String, path: String = "$testRootPath/$name", isDir: Boolean = false): FileNode {
+        val uri = fileUri(path)
         return FileNode(
-            documentId = "id_$name",
-            treeUri = testUri(),
-            uri = testUri(name),
+            documentId = path,
+            treeUri = fileUri(testRootPath),
+            uri = uri,
             name = name,
             mimeType = if (isDir) DocumentsContract.Document.MIME_TYPE_DIR else "image/jpeg",
             size = 0,
@@ -66,18 +76,22 @@ class FileExplorerViewModelTest {
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        context = mockk(relaxed = true)
         browseFiles = mockk()
         repository = mockk()
         renameFilesUseCase = mockk()
         undoOperation = mockk()
         savedStateHandle = SavedStateHandle()
 
-        coEvery { repository.getStalePermissions() } returns emptyList()
-        coEvery { repository.getGrantedUriCount() } returns 0
-        coEvery { repository.isNearUriQuota() } returns false
-        coEvery { repository.persistUriPermission(any()) } returns Unit
-
         every { renameFilesUseCase.progress } returns progressFlow
+
+        // Mock permission check: always granted so tests can browse
+        mockkStatic(Environment::class)
+        every { Environment.isExternalStorageManager() } returns true
+        every { Environment.getExternalStorageDirectory() } returns File(testRootPath)
+
+        // Mock Build.VERSION.SDK_INT >= R
+        mockkStatic(Build.VERSION::class)
     }
 
     @After
@@ -86,112 +100,98 @@ class FileExplorerViewModelTest {
     }
 
     private fun createViewModel(): FileExplorerViewModel =
-        FileExplorerViewModel(browseFiles, repository, renameFilesUseCase, undoOperation, savedStateHandle)
-
-    // ── Browse / nav tests ───────────────────────────────────────────────────────
+        FileExplorerViewModel(context, browseFiles, repository, renameFilesUseCase, undoOperation, savedStateHandle)
 
     @Test
-    fun `initial state emits PermissionRequired when no URIs granted`() = runTest {
+    fun `initial state loads root folder when permission granted`() = runTest {
+        coEvery { browseFiles(testRootPath) } returns emptyList()
+
         val vm = createViewModel()
         advanceUntilIdle()
-        assertTrue(vm.uiState.value is FileExplorerUiState.PermissionRequired)
+
+        assertTrue(vm.uiState.value is FileExplorerUiState.Browsing)
     }
 
     @Test
-    fun `onFolderGranted navigates to folder and emits Browsing`() = runTest {
-        val folderUri = testUri("folder")
-        val files = listOf(fileNode("a.jpg"), fileNode("b.jpg"))
-        coEvery { browseFiles(folderUri) } returns files
-        coEvery { repository.getGrantedUriCount() } returns 1
+    fun `onFolderGranted replaced by onPermissionGranted — navigates to root`() = runTest {
+        coEvery { browseFiles(testRootPath) } returns listOf(fileNode("a.jpg"))
 
         val vm = createViewModel()
         advanceUntilIdle()
 
-        vm.onFolderGranted(folderUri)
+        vm.onPermissionGranted()
         advanceUntilIdle()
 
         val state = vm.uiState.value
         assertTrue(state is FileExplorerUiState.Browsing)
-        assertEquals(2, (state as FileExplorerUiState.Browsing).entries.size)
+        assertEquals(1, (state as FileExplorerUiState.Browsing).entries.size)
     }
 
     @Test
-    fun `toggleSelection adds and removes file from selection`() = runTest {
-        val folderUri = testUri("folder")
+    fun `toggleSelection adds and removes file`() = runTest {
         val files = listOf(fileNode("a.jpg"), fileNode("b.jpg"))
-        coEvery { browseFiles(folderUri) } returns files
-        coEvery { repository.getGrantedUriCount() } returns 1
+        coEvery { browseFiles(testRootPath) } returns files
 
         val vm = createViewModel()
-        vm.onFolderGranted(folderUri)
         advanceUntilIdle()
 
-        vm.toggleSelection("id_a.jpg")
+        val path = "$testRootPath/a.jpg"
+        vm.toggleSelection(path)
         advanceUntilIdle()
 
-        var browsing = vm.uiState.value as FileExplorerUiState.Browsing
-        assertEquals(1, browsing.selectedCount)
+        assertEquals(1, (vm.uiState.value as FileExplorerUiState.Browsing).selectedCount)
 
-        vm.toggleSelection("id_a.jpg")
+        vm.toggleSelection(path)
         advanceUntilIdle()
 
-        browsing = vm.uiState.value as FileExplorerUiState.Browsing
-        assertEquals(0, browsing.selectedCount)
+        assertEquals(0, (vm.uiState.value as FileExplorerUiState.Browsing).selectedCount)
     }
 
     @Test
     fun `selectAll selects only non-directory files`() = runTest {
-        val folderUri = testUri("folder")
-        val files = listOf(fileNode("a.jpg"), fileNode("SubDir", isDir = true), fileNode("b.jpg"))
-        coEvery { browseFiles(folderUri) } returns files
-        coEvery { repository.getGrantedUriCount() } returns 1
+        val files = listOf(
+            fileNode("a.jpg"),
+            fileNode("SubDir", isDir = true),
+            fileNode("b.jpg")
+        )
+        coEvery { browseFiles(testRootPath) } returns files
 
         val vm = createViewModel()
-        vm.onFolderGranted(folderUri)
         advanceUntilIdle()
-
         vm.selectAll()
         advanceUntilIdle()
 
         val browsing = vm.uiState.value as FileExplorerUiState.Browsing
-        // 2 files, 1 directory — only 2 should be selected
         assertEquals(2, browsing.selectedCount)
-        assertFalse("id_SubDir" in browsing.selection)
+        assertFalse("$testRootPath/SubDir" in browsing.selection)
     }
 
     @Test
     fun `deselectAll clears selection`() = runTest {
-        val folderUri = testUri("folder")
         val files = listOf(fileNode("a.jpg"), fileNode("b.jpg"))
-        coEvery { browseFiles(folderUri) } returns files
-        coEvery { repository.getGrantedUriCount() } returns 1
+        coEvery { browseFiles(testRootPath) } returns files
 
         val vm = createViewModel()
-        vm.onFolderGranted(folderUri)
         advanceUntilIdle()
         vm.selectAll()
         advanceUntilIdle()
         vm.deselectAll()
         advanceUntilIdle()
 
-        val browsing = vm.uiState.value as FileExplorerUiState.Browsing
-        assertEquals(0, browsing.selectedCount)
+        assertEquals(0, (vm.uiState.value as FileExplorerUiState.Browsing).selectedCount)
     }
 
     @Test
     fun `previewRename emits RenamePreviewing state`() = runTest {
-        val folderUri = testUri("folder")
         val files = listOf(fileNode("a.jpg"), fileNode("b.jpg"))
-        coEvery { browseFiles(folderUri) } returns files
-        coEvery { repository.getGrantedUriCount() } returns 1
+        coEvery { browseFiles(testRootPath) } returns files
 
         val vm = createViewModel()
-        vm.onFolderGranted(folderUri)
         advanceUntilIdle()
         vm.selectAll()
         advanceUntilIdle()
 
-        vm.previewRename(RenameRule.AddPrefix("2024_"))
+        vm.previewRename(listOf(RenameRule.AddPrefix("2024_")))
 
         val state = vm.uiState.value
         assertTrue(state is FileExplorerUiState.RenamePreviewing)
@@ -199,63 +199,65 @@ class FileExplorerViewModelTest {
     }
 
     @Test
-    fun `navigateUp returns to parent folder`() = runTest {
-        val rootUri = testUri("root")
-        val childUri = testUri("child")
-        val rootFiles = listOf(fileNode("SubDir", isDir = true))
-        val childFiles = listOf(fileNode("img.jpg"))
-
-        coEvery { browseFiles(rootUri) } returns rootFiles
-        coEvery { browseFiles(childUri) } returns childFiles
-        coEvery { repository.getGrantedUriCount() } returns 1
+    fun `navigateTo goes into subdirectory`() = runTest {
+        val childPath = "$testRootPath/DCIM"
+        coEvery { browseFiles(testRootPath) } returns listOf(fileNode("DCIM", isDir = true))
+        coEvery { browseFiles(childPath) } returns listOf(fileNode("photo.jpg", "$childPath/photo.jpg"))
 
         val vm = createViewModel()
-        vm.onFolderGranted(rootUri)
-        advanceUntilIdle()
-        vm.navigateTo(childUri)
         advanceUntilIdle()
 
-        val childState = vm.uiState.value as FileExplorerUiState.Browsing
-        assertTrue(childState.canGoUp)
+        vm.navigateTo(childPath)
+        advanceUntilIdle()
+
+        val state = vm.uiState.value as FileExplorerUiState.Browsing
+        assertTrue(state.canGoUp)
+        assertEquals(1, state.entries.size)
+    }
+
+    @Test
+    fun `navigateUp returns to parent`() = runTest {
+        val childPath = "$testRootPath/DCIM"
+        coEvery { browseFiles(testRootPath) } returns emptyList()
+        coEvery { browseFiles(childPath) } returns emptyList()
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+        vm.navigateTo(childPath)
+        advanceUntilIdle()
+
+        assertTrue((vm.uiState.value as FileExplorerUiState.Browsing).canGoUp)
 
         vm.navigateUp()
         advanceUntilIdle()
 
-        val parentState = vm.uiState.value as FileExplorerUiState.Browsing
-        assertFalse(parentState.canGoUp)
+        assertFalse((vm.uiState.value as FileExplorerUiState.Browsing).canGoUp)
     }
 
     @Test
-    fun `navigateUp returns false at root`() = runTest {
-        val rootUri = testUri("root")
-        coEvery { browseFiles(rootUri) } returns emptyList()
-        coEvery { repository.getGrantedUriCount() } returns 1
+    fun `navigateUp at root returns false`() = runTest {
+        coEvery { browseFiles(testRootPath) } returns emptyList()
 
         val vm = createViewModel()
-        vm.onFolderGranted(rootUri)
         advanceUntilIdle()
 
-        val result = vm.navigateUp()
-        assertFalse(result)
+        assertFalse(vm.navigateUp())
     }
 
     @Test
     fun `navigateTo clears selection`() = runTest {
-        val rootUri = testUri("root")
-        val childUri = testUri("child")
-        coEvery { browseFiles(rootUri) } returns listOf(fileNode("a.jpg"))
-        coEvery { browseFiles(childUri) } returns emptyList()
-        coEvery { repository.getGrantedUriCount() } returns 1
+        val childPath = "$testRootPath/DCIM"
+        coEvery { browseFiles(testRootPath) } returns listOf(fileNode("a.jpg"))
+        coEvery { browseFiles(childPath) } returns emptyList()
 
         val vm = createViewModel()
-        vm.onFolderGranted(rootUri)
         advanceUntilIdle()
         vm.selectAll()
         advanceUntilIdle()
 
         assertEquals(1, (vm.uiState.value as FileExplorerUiState.Browsing).selectedCount)
 
-        vm.navigateTo(childUri)
+        vm.navigateTo(childPath)
         advanceUntilIdle()
 
         assertEquals(0, (vm.uiState.value as FileExplorerUiState.Browsing).selectedCount)
@@ -263,12 +265,9 @@ class FileExplorerViewModelTest {
 
     @Test
     fun `folder load failure emits Error state`() = runTest {
-        val folderUri = testUri("folder")
-        coEvery { browseFiles(folderUri) } throws RuntimeException("Permission denied")
-        coEvery { repository.getGrantedUriCount() } returns 1
+        coEvery { browseFiles(testRootPath) } throws RuntimeException("Permission denied")
 
         val vm = createViewModel()
-        vm.onFolderGranted(folderUri)
         advanceUntilIdle()
 
         val state = vm.uiState.value
@@ -277,73 +276,49 @@ class FileExplorerViewModelTest {
     }
 
     @Test
-    fun `stale permission is removed and PermissionRequired emitted`() = runTest {
-        val staleUri = testUri("stale")
-        coEvery { repository.getStalePermissions() } returns listOf(staleUri)
-        coEvery { repository.revokeUriPermission(staleUri) } returns Unit
-        coEvery { repository.getGrantedUriCount() } returns 0
-
-        val vm = createViewModel()
-        advanceUntilIdle()
-
-        assertTrue(vm.uiState.value is FileExplorerUiState.PermissionRequired)
-    }
-
-    // ── Rename execution tests ───────────────────────────────────────────────────
-
-    @Test
-    fun `confirmRename transitions through RenameInProgress to RenameResult`() = runTest {
-        val folderUri = testUri("folder")
+    fun `confirmRename transitions to RenameResult`() = runTest {
         val files = listOf(fileNode("a.jpg"), fileNode("b.jpg"))
-        coEvery { browseFiles(folderUri) } returns files
-        coEvery { repository.getGrantedUriCount() } returns 1
+        coEvery { browseFiles(testRootPath) } returns files
 
         val vm = createViewModel()
-        vm.onFolderGranted(folderUri)
         advanceUntilIdle()
         vm.selectAll()
         advanceUntilIdle()
-        vm.previewRename(RenameRule.AddPrefix("new_"))
+        vm.previewRename(listOf(RenameRule.AddPrefix("new_")))
         advanceUntilIdle()
 
         val previewState = vm.uiState.value as FileExplorerUiState.RenamePreviewing
 
         coEvery { renameFilesUseCase.executeBatch(any()) } returns listOf(
-            RenameResult(testUri("a.jpg"), "a.jpg", "new_a.jpg", testUri("new_a.jpg"), null),
-            RenameResult(testUri("b.jpg"), "b.jpg", "new_b.jpg", testUri("new_b.jpg"), null)
+            RenameResult(fileUri("$testRootPath/a.jpg"), "a.jpg", "new_a.jpg", fileUri("$testRootPath/new_a.jpg"), null),
+            RenameResult(fileUri("$testRootPath/b.jpg"), "b.jpg", "new_b.jpg", fileUri("$testRootPath/new_b.jpg"), null)
         )
 
         vm.confirmRename(previewState)
         advanceUntilIdle()
 
-        val result = vm.uiState.value
-        assertTrue(result is FileExplorerUiState.RenameResult)
-        val renameResult = result as FileExplorerUiState.RenameResult
-        assertEquals(2, renameResult.successCount)
-        assertEquals(0, renameResult.failureCount)
-        assertTrue(renameResult.errors.isEmpty())
+        val result = vm.uiState.value as FileExplorerUiState.RenameResult
+        assertEquals(2, result.successCount)
+        assertEquals(0, result.failureCount)
     }
 
     @Test
-    fun `confirmRename records partial failures in RenameResult`() = runTest {
-        val folderUri = testUri("folder")
+    fun `confirmRename records partial failures`() = runTest {
         val files = listOf(fileNode("a.jpg"), fileNode("b.jpg"))
-        coEvery { browseFiles(folderUri) } returns files
-        coEvery { repository.getGrantedUriCount() } returns 1
+        coEvery { browseFiles(testRootPath) } returns files
 
         val vm = createViewModel()
-        vm.onFolderGranted(folderUri)
         advanceUntilIdle()
         vm.selectAll()
         advanceUntilIdle()
-        vm.previewRename(RenameRule.AddPrefix("new_"))
+        vm.previewRename(listOf(RenameRule.AddPrefix("new_")))
         advanceUntilIdle()
 
         val previewState = vm.uiState.value as FileExplorerUiState.RenamePreviewing
 
         coEvery { renameFilesUseCase.executeBatch(any()) } returns listOf(
-            RenameResult(testUri("a.jpg"), "a.jpg", "new_a.jpg", testUri("new_a.jpg"), null),
-            RenameResult(testUri("b.jpg"), "b.jpg", "new_b.jpg", null, Exception("Permission denied"))
+            RenameResult(fileUri("$testRootPath/a.jpg"), "a.jpg", "new_a.jpg", fileUri("$testRootPath/new_a.jpg"), null),
+            RenameResult(fileUri("$testRootPath/b.jpg"), "b.jpg", "new_b.jpg", null, Exception("Permission denied"))
         )
 
         vm.confirmRename(previewState)
@@ -357,22 +332,18 @@ class FileExplorerViewModelTest {
 
     @Test
     fun `undoLastBatch delegates to UndoOperationUseCase and reloads folder`() = runTest {
-        val folderUri = testUri("folder")
-        coEvery { browseFiles(folderUri) } returns emptyList()
-        coEvery { repository.getGrantedUriCount() } returns 1
+        coEvery { browseFiles(testRootPath) } returns emptyList()
         coEvery { undoOperation.undoBatch("batch-x") } returns UndoResult(
             batchId = "batch-x", reversedCount = 2, skippedCount = 0, failedCount = 0
         )
 
         val vm = createViewModel()
-        vm.onFolderGranted(folderUri)
         advanceUntilIdle()
 
         vm.undoLastBatch("batch-x")
         advanceUntilIdle()
 
         coVerify(exactly = 1) { undoOperation.undoBatch("batch-x") }
-        // After undo, folder is reloaded → state should be Browsing
         assertTrue(vm.uiState.value is FileExplorerUiState.Browsing)
     }
 

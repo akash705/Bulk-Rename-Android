@@ -28,34 +28,33 @@ fun PreviewItemRow(
     val hasIssue = item.hasConflict || item.validationError != null
     val isUnchanged = item.isUnchanged
 
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         // Original name
         Text(
             text = item.fileNode.name,
-            style = MaterialTheme.typography.bodyMedium.let {
-                if (isUnchanged) it.copy(textDecoration = TextDecoration.None) else it
-            },
+            style = MaterialTheme.typography.bodyMedium,
             color = if (isUnchanged) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
 
-        Icon(
-            imageVector = Icons.Default.ArrowForward,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 8.dp)
-        )
+        // Arrow + proposed name
+        Row(
+            modifier = Modifier.padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 8.dp)
+            )
 
-        // Proposed name
-        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = item.proposedName,
                 style = MaterialTheme.typography.bodyMedium,
@@ -65,31 +64,35 @@ fun PreviewItemRow(
                     isUnchanged -> MaterialTheme.colorScheme.onSurfaceVariant
                     else -> MaterialTheme.colorScheme.primary
                 },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
-            if (item.validationError != null) {
-                Text(
-                    text = item.validationError,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            } else if (item.hasConflict) {
-                Text(
-                    text = "Conflict resolved",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary
+
+            if (hasIssue) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = if (item.validationError != null) "Error" else "Conflict",
+                    tint = if (item.validationError != null) MaterialTheme.colorScheme.error
+                           else MaterialTheme.colorScheme.tertiary
                 )
             }
         }
 
-        if (hasIssue) {
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = if (item.validationError != null) "Error" else "Conflict",
-                tint = if (item.validationError != null) MaterialTheme.colorScheme.error
-                       else MaterialTheme.colorScheme.tertiary
+        if (item.validationError != null) {
+            Text(
+                text = item.validationError,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 2.dp, start = 32.dp)
+            )
+        } else if (item.hasConflict) {
+            Text(
+                text = "Conflict resolved",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.padding(top = 2.dp, start = 32.dp)
             )
         }
     }

@@ -14,6 +14,9 @@ data class FileNode(
     val flags: Int,
     val displayPath: String = ""
 ) {
+    /** Absolute filesystem path, derived from the file:// URI. */
+    val absolutePath: String get() = uri.path ?: ""
+
     val isDirectory: Boolean
         get() = mimeType == DocumentsContract.Document.MIME_TYPE_DIR
 

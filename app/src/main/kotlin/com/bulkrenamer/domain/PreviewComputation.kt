@@ -6,6 +6,10 @@ import com.bulkrenamer.data.model.RenameRule
 /**
  * Computes rename preview as a pure function — no I/O.
  *
+ * Rules are applied in order as a chain: the output of rule N becomes the input to rule N+1.
+ * The file's position index (0-based) is passed to each rule so that [RenameRule.AddNumbering]
+ * can produce sequential numbers across the batch.
+ *
  * Conflict detection checks against:
  * 1. Existing names of files NOT being renamed (non-selected files in the same folder)
  * 2. Names already produced by earlier items in this batch (within-batch duplicates)
@@ -14,7 +18,7 @@ import com.bulkrenamer.data.model.RenameRule
  */
 fun computePreview(
     selectedFiles: List<FileNode>,
-    rule: RenameRule,
+    rules: List<RenameRule>,
     existingNamesInFolder: Set<String> = emptySet()
 ): List<RenamePreviewItem> {
     // Names of non-selected files that we must not collide with
@@ -22,8 +26,11 @@ fun computePreview(
     // Names already produced in this batch
     val batchNames = mutableSetOf<String>()
 
-    return selectedFiles.map { node ->
-        val rawProposed = rule.apply(node)
+    return selectedFiles.mapIndexed { fileIndex, node ->
+        // Chain all rules: each rule receives the output of the previous one.
+        val rawProposed = rules.fold(node.name) { acc, rule ->
+            rule.apply(acc, node.isDirectory, fileIndex)
+        }
         val unchanged = rawProposed == node.name
 
         val validationError = when {

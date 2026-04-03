@@ -1,6 +1,5 @@
 package com.bulkrenamer.domain
 
-import android.net.Uri
 import com.bulkrenamer.data.model.FileNode
 import com.bulkrenamer.data.repository.FileSystemRepository
 import javax.inject.Inject
@@ -8,11 +7,8 @@ import javax.inject.Inject
 class BrowseFilesUseCase @Inject constructor(
     private val repository: FileSystemRepository
 ) {
-    /**
-     * List children of [folderUri], sorted: directories first, then alphabetical by name.
-     */
-    suspend operator fun invoke(folderUri: Uri): List<FileNode> {
-        return repository.listChildren(folderUri)
+    /** List [path] children: directories first, then files — both alphabetical. */
+    suspend operator fun invoke(path: String): List<FileNode> =
+        repository.listChildren(path)
             .sortedWith(compareByDescending<FileNode> { it.isDirectory }.thenBy { it.name.lowercase() })
-    }
 }

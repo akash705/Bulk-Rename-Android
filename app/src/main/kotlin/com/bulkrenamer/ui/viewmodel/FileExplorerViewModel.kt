@@ -1,6 +1,11 @@
 package com.bulkrenamer.ui.viewmodel
 
-import android.net.Uri
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Environment
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,8 +18,12 @@ import com.bulkrenamer.domain.UndoOperationUseCase
 import com.bulkrenamer.domain.computePreview
 import com.bulkrenamer.service.RenameProgressState
 import com.bulkrenamer.ui.state.FileExplorerUiState
+import com.bulkrenamer.ui.state.FileFilter
 import com.bulkrenamer.ui.state.RenameError
+import com.bulkrenamer.ui.state.SortDirection
+import com.bulkrenamer.ui.state.SortField
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +36,7 @@ private const val KEY_NAV_STACK = "nav_stack"
 
 @HiltViewModel
 class FileExplorerViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val browseFiles: BrowseFilesUseCase,
     private val fileSystemRepository: FileSystemRepository,
     private val renameFilesUseCase: RenameFilesUseCase,
@@ -37,51 +47,76 @@ class FileExplorerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<FileExplorerUiState>(FileExplorerUiState.Loading)
     val uiState: StateFlow<FileExplorerUiState> = _uiState.asStateFlow()
 
-    // Navigation stack: list of URI strings, persisted across process death
+    // Navigation stack: list of absolute paths, persisted across process death
     private var navStack: List<String>
         get() = savedStateHandle[KEY_NAV_STACK] ?: emptyList()
         set(value) { savedStateHandle[KEY_NAV_STACK] = value }
 
-    // Selection is folder-scoped and NOT persisted — clears on navigation
     private var currentSelection: Set<String> = emptySet()
+    private var currentSortField: SortField = SortField.NAME
+    private var currentSortDirection: SortDirection = SortDirection.ASC
+    private var currentFilter: FileFilter = FileFilter.ALL
+    private var showHiddenFiles: Boolean = false
+    private var rawEntries: List<com.bulkrenamer.data.model.FileNode> = emptyList()
 
     init {
         viewModelScope.launch {
             val stack = navStack
-            if (stack.isEmpty()) {
-                checkPermissionsAndInit()
+            if (stack.isNotEmpty()) {
+                loadFolder(stack.last())
             } else {
-                loadFolder(Uri.parse(stack.last()))
+                checkPermissionAndInit()
             }
         }
     }
 
-    private suspend fun checkPermissionsAndInit() {
-        val stale = fileSystemRepository.getStalePermissions()
-        stale.forEach { fileSystemRepository.revokeUriPermission(it) }
-
-        val allGranted = fileSystemRepository.getGrantedUriCount() > 0
-        if (!allGranted) {
-            _uiState.value = FileExplorerUiState.PermissionRequired
+    private fun hasStoragePermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
         } else {
-            // This shouldn't normally happen (navStack would have URIs), but recover gracefully
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+    private suspend fun checkPermissionAndInit() {
+        if (!hasStoragePermission()) {
             _uiState.value = FileExplorerUiState.PermissionRequired
+            return
         }
+        val rootPath = Environment.getExternalStorageDirectory().absolutePath
+        navStack = listOf(rootPath)
+        loadFolder(rootPath)
     }
 
-    fun onFolderGranted(uri: Uri) {
-        viewModelScope.launch {
-            fileSystemRepository.persistUriPermission(uri)
-            navStack = listOf(uri.toString())
-            currentSelection = emptySet()
-            loadFolder(uri)
-        }
+    /** Called by the permission screen once the user has granted access. */
+    fun onPermissionGranted() {
+        viewModelScope.launch { checkPermissionAndInit() }
     }
 
-    fun navigateTo(folderUri: Uri) {
-        navStack = navStack + folderUri.toString()
+    fun navigateTo(path: String) {
+        navStack = navStack + path
         currentSelection = emptySet()
-        viewModelScope.launch { loadFolder(folderUri) }
+        viewModelScope.launch { loadFolder(path) }
+    }
+
+    fun navigateToBreadcrumb(path: String) {
+        val root = Environment.getExternalStorageDirectory().absolutePath
+        // Rebuild the nav stack up to the target path
+        val newStack = mutableListOf(root)
+        if (path != root && path.startsWith(root)) {
+            val relative = path.removePrefix(root).trimStart('/')
+            var current = root
+            for (part in relative.split("/")) {
+                if (part.isNotEmpty()) {
+                    current = "$current/$part"
+                    newStack.add(current)
+                }
+            }
+        }
+        navStack = newStack
+        currentSelection = emptySet()
+        viewModelScope.launch { loadFolder(path) }
     }
 
     fun navigateUp(): Boolean {
@@ -90,22 +125,25 @@ class FileExplorerViewModel @Inject constructor(
         val newStack = stack.dropLast(1)
         navStack = newStack
         currentSelection = emptySet()
-        viewModelScope.launch { loadFolder(Uri.parse(newStack.last())) }
+        viewModelScope.launch { loadFolder(newStack.last()) }
         return true
     }
 
-    private suspend fun loadFolder(uri: Uri) {
+    private suspend fun loadFolder(path: String) {
         _uiState.value = FileExplorerUiState.Loading
         try {
-            val files = browseFiles(uri)
-            val nearQuota = fileSystemRepository.isNearUriQuota()
+            rawEntries = browseFiles(path)
             _uiState.value = FileExplorerUiState.Browsing(
-                currentUri = uri,
-                displayPath = buildDisplayPath(),
-                entries = files,
+                currentPath = path,
+                displayPath = buildDisplayPath(path),
+                entries = applySortAndFilter(rawEntries),
                 selection = currentSelection,
                 canGoUp = navStack.size > 1,
-                isNearUriQuota = nearQuota
+                sortField = currentSortField,
+                sortDirection = currentSortDirection,
+                fileFilter = currentFilter,
+                showHiddenFiles = showHiddenFiles,
+                breadcrumbs = buildBreadcrumbs(path)
             )
         } catch (e: Exception) {
             _uiState.value = FileExplorerUiState.Error(
@@ -113,6 +151,72 @@ class FileExplorerViewModel @Inject constructor(
                 recoverable = true
             )
         }
+    }
+
+    fun setSortField(field: SortField) {
+        if (currentSortField == field) {
+            currentSortDirection = if (currentSortDirection == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC
+        } else {
+            currentSortField = field
+            currentSortDirection = SortDirection.ASC
+        }
+        refreshBrowsingState()
+    }
+
+    fun setFilter(filter: FileFilter) {
+        currentFilter = filter
+        refreshBrowsingState()
+    }
+
+    fun toggleShowHiddenFiles() {
+        showHiddenFiles = !showHiddenFiles
+        refreshBrowsingState()
+    }
+
+    private fun refreshBrowsingState() {
+        val browsing = _uiState.value as? FileExplorerUiState.Browsing ?: return
+        _uiState.value = browsing.copy(
+            entries = applySortAndFilter(rawEntries),
+            sortField = currentSortField,
+            sortDirection = currentSortDirection,
+            fileFilter = currentFilter,
+            showHiddenFiles = showHiddenFiles
+        )
+    }
+
+    private fun applySortAndFilter(
+        files: List<com.bulkrenamer.data.model.FileNode>
+    ): List<com.bulkrenamer.data.model.FileNode> {
+        val imageExts = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic")
+        val videoExts = setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "3gp")
+        val docExts = setOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "odt")
+
+        val visible = if (showHiddenFiles) files else files.filter { !it.name.startsWith(".") }
+
+        val filtered = when (currentFilter) {
+            FileFilter.ALL -> visible
+            FileFilter.FILES_ONLY -> visible.filter { !it.isDirectory }
+            FileFilter.FOLDERS_ONLY -> visible.filter { it.isDirectory }
+            FileFilter.IMAGES -> visible.filter { it.isDirectory || it.extension.lowercase() in imageExts }
+            FileFilter.VIDEOS -> visible.filter { it.isDirectory || it.extension.lowercase() in videoExts }
+            FileFilter.DOCUMENTS -> visible.filter { it.isDirectory || it.extension.lowercase() in docExts }
+        }
+
+        val comparator: Comparator<com.bulkrenamer.data.model.FileNode> = when (currentSortField) {
+            SortField.NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+            SortField.SIZE -> compareBy { it.size }
+            SortField.DATE -> compareBy { it.lastModified }
+            SortField.EXTENSION -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.extension }
+        }
+
+        // Directories first, then sort within each group
+        val dirs = filtered.filter { it.isDirectory }.sortedWith(comparator)
+        val nonDirs = filtered.filter { !it.isDirectory }.sortedWith(comparator)
+
+        val sortedDirs = if (currentSortDirection == SortDirection.DESC) dirs.reversed() else dirs
+        val sortedFiles = if (currentSortDirection == SortDirection.DESC) nonDirs.reversed() else nonDirs
+
+        return sortedDirs + sortedFiles
     }
 
     fun toggleSelection(documentId: String) {
@@ -126,7 +230,6 @@ class FileExplorerViewModel @Inject constructor(
 
     fun selectAll() {
         val browsing = _uiState.value as? FileExplorerUiState.Browsing ?: return
-        // Only select non-directory files (directories cannot be renamed)
         currentSelection = browsing.entries
             .filter { !it.isDirectory && it.isRenameable }
             .map { it.documentId }
@@ -144,21 +247,20 @@ class FileExplorerViewModel @Inject constructor(
         _uiState.value = browsing.copy(selection = currentSelection)
     }
 
-    fun previewRename(rule: RenameRule) {
+    fun previewRename(rules: List<RenameRule>) {
         val browsing = _uiState.value as? FileExplorerUiState.Browsing ?: return
         val selectedFiles = browsing.selectedFiles
-        if (selectedFiles.isEmpty()) return
+        if (selectedFiles.isEmpty() || rules.isEmpty()) return
 
-        // Pass existing non-selected filenames for collision detection
         val nonSelectedNames = browsing.entries
             .filter { it.documentId !in browsing.selection }
             .map { it.name }
             .toSet()
 
-        val preview = computePreview(selectedFiles, rule, nonSelectedNames)
+        val preview = computePreview(selectedFiles, rules, nonSelectedNames)
         _uiState.value = FileExplorerUiState.RenamePreviewing(
             previewItems = preview,
-            rule = rule,
+            rules = rules,
             selectedCount = selectedFiles.size
         )
     }
@@ -183,7 +285,6 @@ class FileExplorerViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            // Set initial in-progress state so the progress dialog appears immediately
             _uiState.value = FileExplorerUiState.RenameInProgress(
                 total = ops.size,
                 completed = 0,
@@ -191,7 +292,6 @@ class FileExplorerViewModel @Inject constructor(
                 batchId = batchId
             )
 
-            // Track per-file progress from the use case's StateFlow
             val progressJob = launch {
                 renameFilesUseCase.progress
                     .filterIsInstance<RenameProgressState.InProgress>()
@@ -227,14 +327,11 @@ class FileExplorerViewModel @Inject constructor(
         }
     }
 
-    fun cancelRename() {
-        renameFilesUseCase.cancel()
-    }
+    fun cancelRename() { renameFilesUseCase.cancel() }
 
     fun undoLastBatch(batchId: String) {
         viewModelScope.launch {
             undoOperation.undoBatch(batchId)
-            // Reload folder after undo so filenames update in the list
             backToBrowsing()
         }
     }
@@ -245,22 +342,41 @@ class FileExplorerViewModel @Inject constructor(
             _uiState.value = FileExplorerUiState.PermissionRequired
             return
         }
-        viewModelScope.launch { loadFolder(Uri.parse(stack.last())) }
+        viewModelScope.launch { loadFolder(stack.last()) }
     }
 
     fun retry() {
-        val stack = navStack
-        if (stack.isEmpty()) {
-            viewModelScope.launch { checkPermissionsAndInit() }
-        } else {
-            viewModelScope.launch { loadFolder(Uri.parse(stack.last())) }
+        viewModelScope.launch {
+            val stack = navStack
+            if (stack.isEmpty()) checkPermissionAndInit()
+            else loadFolder(stack.last())
         }
     }
 
-    private fun buildDisplayPath(): String {
-        // Simple path derived from stack depth; actual display path set by UI from URI
-        return navStack.size.let { depth ->
-            if (depth == 1) "/" else "/${navStack.drop(1).size} levels deep"
+    private fun buildDisplayPath(path: String): String {
+        val root = Environment.getExternalStorageDirectory().absolutePath
+        return when {
+            path == root -> "Internal Storage"
+            path.startsWith(root) -> path.removePrefix(root)
+            else -> path
         }
+    }
+
+    private fun buildBreadcrumbs(path: String): List<FileExplorerUiState.BreadcrumbSegment> {
+        val root = Environment.getExternalStorageDirectory().absolutePath
+        val segments = mutableListOf(
+            FileExplorerUiState.BreadcrumbSegment("Internal Storage", root)
+        )
+        if (path != root && path.startsWith(root)) {
+            val relative = path.removePrefix(root).trimStart('/')
+            var current = root
+            for (part in relative.split("/")) {
+                if (part.isNotEmpty()) {
+                    current = "$current/$part"
+                    segments.add(FileExplorerUiState.BreadcrumbSegment(part, current))
+                }
+            }
+        }
+        return segments
     }
 }

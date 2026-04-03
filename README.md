@@ -4,6 +4,8 @@ A powerful bulk file renaming app for Android — built with Jetpack Compose, Hi
 
 > **Vibe coded.** Claude wrote every line of this app while the developer hallucinated. 😄
 
+[**Download APK → v1.0.0**](https://github.com/akash705/Bulk-Rename-Android/releases/tag/v1.0.0)
+
 ---
 
 ## Features

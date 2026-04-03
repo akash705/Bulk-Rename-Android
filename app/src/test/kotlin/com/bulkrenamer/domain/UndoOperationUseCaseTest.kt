@@ -6,7 +6,9 @@ import com.bulkrenamer.data.db.RenameJournalEntity
 import com.bulkrenamer.data.repository.FileSystemRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -29,13 +31,7 @@ class UndoOperationUseCaseTest {
     private lateinit var journalDao: RenameJournalDao
     private lateinit var useCase: UndoOperationUseCase
 
-    private fun fakeUri(name: String): Uri {
-        val uri = mockk<Uri>(relaxed = true)
-        io.mockk.every { uri.toString() } returns "content://test/$name"
-        io.mockk.every { Uri.parse("content://test/$name") } returns uri
-        return uri
-    }
-
+    /** Builds a journal entry whose newUri encodes the path as a file:// URI. */
     private fun entry(
         originalName: String,
         newName: String,
@@ -43,12 +39,15 @@ class UndoOperationUseCaseTest {
     ) = RenameJournalEntity(
         id = 0,
         batchId = batchId,
-        originalUri = "content://test/$originalName",
+        originalUri = "file:///test/$originalName",
         originalName = originalName,
-        newUri = "content://test/$newName",
+        newUri = "file:///test/$newName",
         newName = newName,
         timestamp = System.currentTimeMillis()
     )
+
+    /** Returns the path that UndoOperationUseCase derives from a file:// newUri. */
+    private fun pathOf(newName: String) = "/test/$newName"
 
     @Before
     fun setup() {
@@ -56,6 +55,15 @@ class UndoOperationUseCaseTest {
         repository = mockk()
         journalDao = mockk(relaxed = true)
         useCase = UndoOperationUseCase(repository, journalDao)
+
+        // Uri.parse is used inside UndoOperationUseCase to extract the path from newUri.
+        mockkStatic(Uri::class)
+        every { Uri.parse(any()) } answers {
+            val uriStr = firstArg<String>()
+            mockk<Uri>(relaxed = true).also { uri ->
+                every { uri.path } returns uriStr.removePrefix("file://")
+            }
+        }
     }
 
     @After
@@ -72,11 +80,8 @@ class UndoOperationUseCaseTest {
         )
         coEvery { journalDao.getBatchEntries(batchId) } returns entries
         entries.forEach { e ->
-            val uri = mockk<Uri>(relaxed = true)
-            io.mockk.every { uri.toString() } returns e.newUri
-            io.mockk.every { Uri.parse(e.newUri) } returns uri
-            coEvery { repository.getDocumentDisplayName(uri) } returns e.newName
-            coEvery { repository.renameDocument(uri, e.originalName) } returns mockk(relaxed = true)
+            coEvery { repository.getFileName(pathOf(e.newName)) } returns e.newName
+            coEvery { repository.renameFile(pathOf(e.newName), e.originalName) } returns pathOf(e.originalName)
         }
 
         val result = useCase.undoBatch(batchId)
@@ -97,18 +102,12 @@ class UndoOperationUseCaseTest {
         )
         coEvery { journalDao.getBatchEntries(batchId) } returns entries
 
-        // First file: current name is DIFFERENT from journaled newName → later batch renamed it
-        val uri1 = mockk<Uri>(relaxed = true)
-        io.mockk.every { uri1.toString() } returns entries[0].newUri
-        io.mockk.every { Uri.parse(entries[0].newUri) } returns uri1
-        coEvery { repository.getDocumentDisplayName(uri1) } returns "yet_another_name.jpg"
+        // First file: current name differs from journaled newName → later batch renamed it
+        coEvery { repository.getFileName(pathOf("renamed.jpg")) } returns "yet_another_name.jpg"
 
         // Second file: current name matches → can undo
-        val uri2 = mockk<Uri>(relaxed = true)
-        io.mockk.every { uri2.toString() } returns entries[1].newUri
-        io.mockk.every { Uri.parse(entries[1].newUri) } returns uri2
-        coEvery { repository.getDocumentDisplayName(uri2) } returns entries[1].newName
-        coEvery { repository.renameDocument(uri2, entries[1].originalName) } returns mockk(relaxed = true)
+        coEvery { repository.getFileName(pathOf("other_new.jpg")) } returns "other_new.jpg"
+        coEvery { repository.renameFile(pathOf("other_new.jpg"), "other.jpg") } returns pathOf("other.jpg")
 
         val result = useCase.undoBatch(batchId)
 
@@ -120,16 +119,13 @@ class UndoOperationUseCaseTest {
     }
 
     @Test
-    fun `URI dead — skipped`() = runTest {
+    fun `file no longer exists — skipped`() = runTest {
         val batchId = "batch-3"
         val entries = listOf(entry("x.jpg", "x_new.jpg", batchId))
         coEvery { journalDao.getBatchEntries(batchId) } returns entries
 
-        val uri = mockk<Uri>(relaxed = true)
-        io.mockk.every { uri.toString() } returns entries[0].newUri
-        io.mockk.every { Uri.parse(entries[0].newUri) } returns uri
-        // Null means the URI is dead
-        coEvery { repository.getDocumentDisplayName(uri) } returns null
+        // null means the file is gone
+        coEvery { repository.getFileName(pathOf("x_new.jpg")) } returns null
 
         val result = useCase.undoBatch(batchId)
 
@@ -137,21 +133,18 @@ class UndoOperationUseCaseTest {
         assertEquals(1, result.skippedCount)
         assertEquals(0, result.failedCount)
         assertTrue(result.hasWarning)
-        coVerify(exactly = 0) { repository.renameDocument(any(), any()) }
+        coVerify(exactly = 0) { repository.renameFile(any(), any()) }
     }
 
     @Test
-    fun `provider rename fails — counted as failed`() = runTest {
+    fun `rename back fails — counted as failed`() = runTest {
         val batchId = "batch-4"
         val entries = listOf(entry("f.jpg", "f_new.jpg", batchId))
         coEvery { journalDao.getBatchEntries(batchId) } returns entries
 
-        val uri = mockk<Uri>(relaxed = true)
-        io.mockk.every { uri.toString() } returns entries[0].newUri
-        io.mockk.every { Uri.parse(entries[0].newUri) } returns uri
-        coEvery { repository.getDocumentDisplayName(uri) } returns entries[0].newName
-        // Provider returns null — rename failed
-        coEvery { repository.renameDocument(uri, entries[0].originalName) } returns null
+        coEvery { repository.getFileName(pathOf("f_new.jpg")) } returns "f_new.jpg"
+        // renameFile returns null → failure
+        coEvery { repository.renameFile(pathOf("f_new.jpg"), "f.jpg") } returns null
 
         val result = useCase.undoBatch(batchId)
 

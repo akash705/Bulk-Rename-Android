@@ -52,13 +52,6 @@ fun AppNavGraph(
     }
 }
 
-/**
- * Root composable for the file explorer flow.
- *
- * [FileExplorerUiState] is a state machine — the current state determines which screen or
- * overlay is rendered. No Compose Navigation routes are used within this flow because all
- * transitions are driven by the ViewModel state, which is the single source of truth.
- */
 @Composable
 private fun FileExplorerRoot(
     uiState: FileExplorerUiState,
@@ -83,8 +76,6 @@ private fun FileExplorerRoot(
         }
 
         else -> {
-            // FileBrowserScreen handles Loading, PermissionRequired, Browsing, and Error states.
-            // It renders nothing (else -> Unit) for any states it doesn't recognise.
             FileBrowserScreen(
                 uiState = uiState,
                 onNavigateUp = { viewModel.navigateUp() },
@@ -93,13 +84,15 @@ private fun FileExplorerRoot(
                 onSelectAll = { viewModel.selectAll() },
                 onDeselectAll = { viewModel.deselectAll() },
                 onPreviewRename = { viewModel.previewRename(it) },
-                onFolderGranted = { viewModel.onFolderGranted(it) },
+                onPermissionGranted = { viewModel.onPermissionGranted() },
                 onNavigateToHistory = onNavigateToHistory,
+                onSortFieldSelected = { viewModel.setSortField(it) },
+                onFilterSelected = { viewModel.setFilter(it) },
+                onNavigateToBreadcrumb = { viewModel.navigateToBreadcrumb(it) },
+                onToggleHiddenFiles = { viewModel.toggleShowHiddenFiles() },
                 onRetry = { viewModel.retry() }
             )
 
-            // The progress dialog is a non-dismissable overlay on top of the file browser.
-            // It is shown when the rename batch is executing.
             if (uiState is FileExplorerUiState.RenameInProgress) {
                 RenameProgressDialog(
                     state = uiState,

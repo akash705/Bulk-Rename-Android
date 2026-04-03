@@ -12,13 +12,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 data class RenameOperation(
-    val uri: Uri,
+    val uri: Uri,          // file:// URI — uri.path gives the absolute path
     val originalName: String,
     val newName: String,
     val batchId: String
@@ -30,22 +31,16 @@ class RenameFilesUseCase @Inject constructor(
     private val journalDao: RenameJournalDao
 ) {
 
-    // StateFlow: progress is state, not events — new collectors get latest value immediately
     private val _progress = MutableStateFlow<RenameProgressState>(RenameProgressState.Idle)
     val progress: StateFlow<RenameProgressState> = _progress.asStateFlow()
 
     private var cancelled = false
 
-    fun cancel() {
-        cancelled = true
-    }
+    fun cancel() { cancelled = true }
 
     /**
-     * Execute [operations] sequentially. SAF ContentProvider IPC is serialized —
-     * parallel calls add no throughput benefit and risk ANR.
-     *
-     * Journal-before-proceed: each successful rename is journaled *before* moving
-     * to the next file, so undo data survives process death mid-batch.
+     * Execute [operations] sequentially using [File.renameTo].
+     * Journal-before-proceed: each rename is logged immediately so undo survives process death.
      */
     suspend fun executeBatch(operations: List<RenameOperation>): List<RenameResult> =
         withContext(Dispatchers.IO) {
@@ -73,11 +68,18 @@ class RenameFilesUseCase @Inject constructor(
                     currentFileName = op.originalName
                 )
 
-                try {
-                    val newUri = repository.renameDocument(op.uri, op.newName)
-                        ?: throw IOException("renameTo returned null for '${op.originalName}'")
+                val absolutePath = op.uri.path
+                    ?: run {
+                        results.add(RenameResult(op.uri, op.originalName, op.newName, null, IOException("Invalid URI")))
+                        return@forEachIndexed
+                    }
 
-                    // Journal AFTER successful rename, BEFORE next file — enables undo
+                try {
+                    val newPath = repository.renameFile(absolutePath, op.newName)
+                        ?: throw IOException("renameTo failed for '${op.originalName}'")
+
+                    val newUri = Uri.fromFile(File(newPath))
+
                     journalDao.insert(
                         RenameJournalEntity(
                             batchId = batchId,
@@ -89,26 +91,9 @@ class RenameFilesUseCase @Inject constructor(
                         )
                     )
 
-                    results.add(
-                        RenameResult(
-                            originalUri = op.uri,
-                            originalName = op.originalName,
-                            newName = op.newName,
-                            newUri = newUri,
-                            error = null
-                        )
-                    )
+                    results.add(RenameResult(op.uri, op.originalName, op.newName, newUri, null))
                 } catch (e: Exception) {
-                    results.add(
-                        RenameResult(
-                            originalUri = op.uri,
-                            originalName = op.originalName,
-                            newName = op.newName,
-                            newUri = null,
-                            error = e
-                        )
-                    )
-                    // Per-file errors do not stop the batch
+                    results.add(RenameResult(op.uri, op.originalName, op.newName, null, e))
                 }
             }
 

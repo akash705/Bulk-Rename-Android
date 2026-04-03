@@ -1,9 +1,26 @@
 package com.bulkrenamer.ui.state
 
-import android.net.Uri
 import com.bulkrenamer.data.model.FileNode
 import com.bulkrenamer.data.model.RenameRule
 import com.bulkrenamer.domain.RenamePreviewItem
+
+enum class SortField(val label: String) {
+    NAME("Name"),
+    SIZE("Size"),
+    DATE("Date"),
+    EXTENSION("Extension")
+}
+
+enum class SortDirection { ASC, DESC }
+
+enum class FileFilter(val label: String) {
+    ALL("All"),
+    FILES_ONLY("Files only"),
+    FOLDERS_ONLY("Folders only"),
+    IMAGES("Images"),
+    VIDEOS("Videos"),
+    DOCUMENTS("Documents")
+}
 
 sealed class FileExplorerUiState {
 
@@ -11,22 +28,33 @@ sealed class FileExplorerUiState {
 
     object PermissionRequired : FileExplorerUiState()
 
+    data class BreadcrumbSegment(
+        val name: String,
+        val path: String
+    )
+
     data class Browsing(
-        val currentUri: Uri,
+        val currentPath: String,
         val displayPath: String,
         val entries: List<FileNode>,
-        val selection: Set<String>, // selected document IDs
+        val selection: Set<String>,   // selected absolute paths (documentId)
         val canGoUp: Boolean,
-        val isNearUriQuota: Boolean = false
+        val sortField: SortField = SortField.NAME,
+        val sortDirection: SortDirection = SortDirection.ASC,
+        val fileFilter: FileFilter = FileFilter.ALL,
+        val showHiddenFiles: Boolean = false,
+        val breadcrumbs: List<BreadcrumbSegment> = emptyList()
     ) : FileExplorerUiState() {
         val selectedCount: Int get() = selection.size
         val selectedFiles: List<FileNode>
             get() = entries.filter { it.documentId in selection }
+        val folderName: String
+            get() = breadcrumbs.lastOrNull()?.name ?: "Internal Storage"
     }
 
     data class RenamePreviewing(
         val previewItems: List<RenamePreviewItem>,
-        val rule: RenameRule,
+        val rules: List<RenameRule>,
         val selectedCount: Int
     ) : FileExplorerUiState() {
         val conflictCount: Int get() = previewItems.count { it.hasConflict }

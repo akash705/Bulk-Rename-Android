@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Pencil / rename icon centered in the safe zone (72dp inner square) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,36 L72,46 L46,72 L36,72 L36,62 Z" />
+    <path
+        android:fillColor="#B3E5FC"
+        android:pathData="M65,33 L75,43 L72,46 L62,36 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,72 L39,65 L43,69 Z" />
+</vector>

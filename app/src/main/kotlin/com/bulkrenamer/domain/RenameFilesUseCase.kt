@@ -1,6 +1,7 @@
 package com.bulkrenamer.domain
 
 import android.net.Uri
+import android.os.Parcelable
 import com.bulkrenamer.data.db.RenameJournalDao
 import com.bulkrenamer.data.db.RenameJournalEntity
 import com.bulkrenamer.data.model.RenameResult
@@ -12,18 +13,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.parcelize.Parcelize
 import java.io.File
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Parcelize
 data class RenameOperation(
     val uri: Uri,          // file:// URI — uri.path gives the absolute path
     val originalName: String,
     val newName: String,
     val batchId: String
-)
+) : Parcelable
 
 @Singleton
 class RenameFilesUseCase @Inject constructor(

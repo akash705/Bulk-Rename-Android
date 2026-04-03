@@ -6,9 +6,11 @@ import com.bulkrenamer.data.repository.FileSystemRepository
 import com.bulkrenamer.service.RenameProgressState
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -32,7 +34,8 @@ class RenameFilesUseCaseTest {
 
     private fun testUri(name: String): Uri {
         val uri = mockk<Uri>(relaxed = true)
-        io.mockk.every { uri.toString() } returns "content://test/$name"
+        every { uri.toString() } returns "file:///test/$name"
+        every { uri.path } returns "/test/$name"
         return uri
     }
 
@@ -68,7 +71,7 @@ class RenameFilesUseCaseTest {
             op("b.jpg", "new_b.jpg", batchId),
             op("c.jpg", "new_c.jpg", batchId)
         )
-        ops.forEach { coEvery { repository.renameDocument(it.uri, it.newName) } returns testUri(it.newName) }
+        ops.forEach { coEvery { repository.renameFile("/test/${it.originalName}", it.newName) } returns "/test/${it.newName}" }
 
         val results = useCase.executeBatch(ops)
 
@@ -87,11 +90,11 @@ class RenameFilesUseCaseTest {
             op("d.jpg", "4.jpg", batchId),
             op("e.jpg", "5.jpg", batchId)
         )
-        coEvery { repository.renameDocument(ops[0].uri, any()) } returns testUri("1.jpg")
-        coEvery { repository.renameDocument(ops[1].uri, any()) } returns testUri("2.jpg")
-        coEvery { repository.renameDocument(ops[2].uri, any()) } returns null  // failure
-        coEvery { repository.renameDocument(ops[3].uri, any()) } returns testUri("4.jpg")
-        coEvery { repository.renameDocument(ops[4].uri, any()) } returns testUri("5.jpg")
+        coEvery { repository.renameFile("/test/a.jpg", any()) } returns "/test/1.jpg"
+        coEvery { repository.renameFile("/test/b.jpg", any()) } returns "/test/2.jpg"
+        coEvery { repository.renameFile("/test/c.jpg", any()) } returns null  // failure
+        coEvery { repository.renameFile("/test/d.jpg", any()) } returns "/test/4.jpg"
+        coEvery { repository.renameFile("/test/e.jpg", any()) } returns "/test/5.jpg"
 
         val results = useCase.executeBatch(ops)
 
@@ -108,7 +111,7 @@ class RenameFilesUseCaseTest {
     fun `all files fail — 0 successes, 0 journal entries`() = runTest {
         val batchId = "batch-003"
         val ops = listOf(op("a.jpg", "1.jpg", batchId), op("b.jpg", "2.jpg", batchId))
-        ops.forEach { coEvery { repository.renameDocument(it.uri, any()) } returns null }
+        ops.forEach { coEvery { repository.renameFile("/test/${it.originalName}", any()) } returns null }
 
         val results = useCase.executeBatch(ops)
 
@@ -121,10 +124,10 @@ class RenameFilesUseCaseTest {
     fun `progress emits correct states through batch`() = runTest {
         val batchId = "batch-004"
         val ops = listOf(op("x.jpg", "y.jpg", batchId))
-        coEvery { repository.renameDocument(ops[0].uri, any()) } returns testUri("y.jpg")
+        coEvery { repository.renameFile("/test/x.jpg", any()) } returns "/test/y.jpg"
 
         val progressValues = mutableListOf<RenameProgressState>()
-        val job = kotlinx.coroutines.launch {
+        val job = launch {
             useCase.progress.collect { progressValues.add(it) }
         }
 
@@ -141,11 +144,13 @@ class RenameFilesUseCaseTest {
         val ops = (1..5).map { op("file$it.jpg", "new$it.jpg", batchId) }
 
         // File 1 renames and then we cancel
-        coEvery { repository.renameDocument(ops[0].uri, any()) } answers {
+        coEvery { repository.renameFile("/test/file1.jpg", any()) } answers {
             useCase.cancel()
-            testUri("new1.jpg")
+            "/test/new1.jpg"
         }
-        ops.drop(1).forEach { coEvery { repository.renameDocument(it.uri, any()) } returns testUri(it.newName) }
+        ops.drop(1).forEach {
+            coEvery { repository.renameFile("/test/${it.originalName}", any()) } returns "/test/${it.newName}"
+        }
 
         val results = useCase.executeBatch(ops)
 

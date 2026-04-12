@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -9,9 +7,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.parcelize")
 }
 
-val keystoreProps = Properties().apply {
-    val f = rootProject.file("keystore.properties")
-    if (f.exists()) load(f.inputStream())
+fun getKeychainPassword(account: String, service: String): String {
+    return Runtime.getRuntime()
+        .exec(arrayOf("security", "find-generic-password", "-a", account, "-s", service, "-w"))
+        .inputStream.bufferedReader().readLine() ?: ""
 }
 
 android {
@@ -30,12 +29,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = keystoreProps["storeFile"]?.let { file(it) }
-            storePassword = keystoreProps["storePassword"] as String?
-            keyAlias = keystoreProps["keyAlias"] as String?
-            keyPassword = keystoreProps["keyPassword"] as String?
-            enableV1Signing = true
-            enableV2Signing = true
+            storeFile = file("${System.getProperty("user.home")}/.android/release.jks")
+            storePassword = getKeychainPassword("release-key", "android-release-keystore")
+            keyAlias = "release-key"
+            keyPassword = getKeychainPassword("release-key", "android-release-keystore")
         }
     }
 

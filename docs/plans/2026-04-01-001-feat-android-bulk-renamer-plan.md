@@ -608,6 +608,5 @@ User confirms → ViewModel starts RenameService (Foreground)
 ## Sources & References
 
 - **Origin document:** [docs/ideation/2026-04-01-android-bulk-renamer-ideation.md](docs/ideation/2026-04-01-android-bulk-renamer-ideation.md)
-- **Previous rough plan:** `/Users/akash/.claude/plans/luminous-dreaming-lobster.md` (contains code samples used as directional reference only)
 - Related Android docs: DocumentsContract, DocumentFile, Storage Access Framework, Foreground Services
 - Related Jetpack docs: Compose, Room, Hilt, Navigation, SavedStateHandle

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bulk Renamer — Powerful batch file renaming for Android</title>
+<meta name="description" content="A powerful bulk file renaming app for Android. Rule chains, live preview, full undo history. Built with Jetpack Compose." />
+<meta property="og:title" content="Bulk Renamer for Android" />
+<meta property="og:description" content="Rule chains, live preview, full undo history. Vibe-coded with Jetpack Compose." />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink-deep: #0B0B12;
+    --ink-elevated: #141420;
+    --ink-high: #1C1C2B;
+    --ink-border: #26263A;
+    --violet: #A78BFA;
+    --violet-muted: #7C6BD4;
+    --pink: #F472B6;
+    --cyan: #38BDF8;
+    --mint: #34D399;
+    --amber: #FBBF24;
+    --coral: #FB7185;
+    --text-high: #F5F5FA;
+    --text-mid: #A1A1B5;
+    --text-low: #6C6C85;
+    --text-dim: #4A4A62;
+    --display: 'Space Grotesk', system-ui, sans-serif;
+    --body: 'Inter', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--ink-deep);
+    color: var(--text-high);
+    font-family: var(--body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* Background gradient orbs */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -300px;
+    left: -200px;
+    width: 700px;
+    height: 700px;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.18), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    top: 200px;
+    right: -300px;
+    width: 800px;
+    height: 800px;
+    background: radial-gradient(circle, rgba(244, 114, 182, 0.12), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Nav */
+  nav {
+    padding: 24px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(38, 38, 58, 0.4);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.3px;
+  }
+  .logo-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--violet), var(--pink));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--ink-deep);
+    font-size: 16px;
+  }
+  .nav-links {
+    display: flex;
+    gap: 32px;
+    list-style: none;
+    align-items: center;
+  }
+  .nav-links a {
+    color: var(--text-mid);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text-high); }
+
+  /* Hero */
+  .hero {
+    padding: 100px 0 80px;
+    text-align: center;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border: 1px solid var(--ink-border);
+    border-radius: 999px;
+    background: rgba(28, 28, 43, 0.6);
+    font-size: 12px;
+    color: var(--text-mid);
+    margin-bottom: 28px;
+    backdrop-filter: blur(10px);
+  }
+  .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--mint);
+    box-shadow: 0 0 8px var(--mint);
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(40px, 7vw, 72px);
+    line-height: 1.05;
+    font-weight: 700;
+    letter-spacing: -1.5px;
+    margin-bottom: 24px;
+  }
+  h1 .grad {
+    background: linear-gradient(135deg, var(--violet), var(--pink) 50%, var(--cyan));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero p {
+    font-size: 18px;
+    color: var(--text-mid);
+    max-width: 600px;
+    margin: 0 auto 40px;
+  }
+
+  .cta-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-family: var(--body);
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    transition: transform 0.15s, box-shadow 0.2s;
+    border: 1px solid transparent;
+    cursor: pointer;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--violet), var(--pink));
+    color: var(--ink-deep);
+    box-shadow: 0 8px 32px rgba(167, 139, 250, 0.35);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(167, 139, 250, 0.5);
+  }
+  .btn-secondary {
+    background: var(--ink-elevated);
+    color: var(--text-high);
+    border-color: var(--ink-border);
+  }
+  .btn-secondary:hover {
+    background: var(--ink-high);
+    border-color: var(--violet-muted);
+  }
+
+  .vibe-note {
+    margin-top: 56px;
+    font-size: 13px;
+    color: var(--text-low);
+    font-family: var(--mono);
+  }
+  .vibe-note .pink { color: var(--pink); }
+
+  /* Section heading */
+  .section { padding: 80px 0; }
+  .section-eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--violet);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-family: var(--display);
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700;
+    letter-spacing: -0.8px;
+    margin-bottom: 16px;
+  }
+  .section-sub {
+    color: var(--text-mid);
+    font-size: 16px;
+    max-width: 640px;
+    margin-bottom: 56px;
+  }
+
+  /* Features grid */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .feature {
+    background: var(--ink-elevated);
+    border: 1px solid var(--ink-border);
+    border-radius: 16px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .feature:hover {
+    border-color: var(--violet-muted);
+    transform: translateY(-2px);
+  }
+  .feature-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--ink-deep);
+  }
+  .icon-violet { background: linear-gradient(135deg, var(--violet), var(--violet-muted)); }
+  .icon-pink   { background: linear-gradient(135deg, var(--pink), var(--coral)); }
+  .icon-cyan   { background: linear-gradient(135deg, var(--cyan), var(--violet)); }
+  .icon-mint   { background: linear-gradient(135deg, var(--mint), var(--cyan)); }
+  .icon-amber  { background: linear-gradient(135deg, var(--amber), var(--coral)); }
+  .icon-coral  { background: linear-gradient(135deg, var(--coral), var(--pink)); }
+  .icon-multi  { background: linear-gradient(135deg, var(--violet), var(--pink), var(--cyan)); }
+
+  .feature h3 {
+    font-family: var(--display);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: -0.2px;
+  }
+  .feature p {
+    color: var(--text-mid);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* Rules table */
+  .rules-card {
+    background: var(--ink-elevated);
+    border: 1px solid var(--ink-border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .rule-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--ink-border);
+    align-items: center;
+    gap: 24px;
+  }
+  .rule-row:last-child { border-bottom: none; }
+  .rule-name {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--violet);
+    font-weight: 500;
+  }
+  .rule-desc {
+    color: var(--text-mid);
+    font-size: 14px;
+  }
+
+  /* Tech stack */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .stack-item {
+    background: var(--ink-elevated);
+    border: 1px solid var(--ink-border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .stack-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .stack-value {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--text-high);
+  }
+
+  /* CTA banner */
+  .cta-banner {
+    margin: 40px 0;
+    padding: 56px 40px;
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(167, 139, 250, 0.25), transparent 60%),
+      radial-gradient(circle at 80% 70%, rgba(244, 114, 182, 0.2), transparent 60%),
+      var(--ink-elevated);
+    border: 1px solid var(--ink-border);
+    text-align: center;
+  }
+  .cta-banner h2 {
+    font-family: var(--display);
+    font-size: clamp(28px, 4vw, 36px);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 12px;
+  }
+  .cta-banner p {
+    color: var(--text-mid);
+    margin-bottom: 28px;
+  }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--ink-border);
+    padding: 40px 0;
+    margin-top: 40px;
+  }
+  .footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  .footer-row p {
+    color: var(--text-low);
+    font-size: 13px;
+  }
+  .footer-links {
+    display: flex;
+    gap: 24px;
+    list-style: none;
+  }
+  .footer-links a {
+    color: var(--text-mid);
+    text-decoration: none;
+    font-size: 13px;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--violet); }
+
+  @media (max-width: 640px) {
+    .nav-links { display: none; }
+    .hero { padding: 60px 0 40px; }
+    .section { padding: 60px 0; }
+    .rule-row { grid-template-columns: 1fr; gap: 6px; padding: 18px 20px; }
+    .cta-banner { padding: 40px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <nav>
+    <div class="logo">
+      <div class="logo-mark">B</div>
+      <span>Bulk Renamer</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#rules">Rules</a></li>
+      <li><a href="#stack">Stack</a></li>
+      <li><a href="https://github.com/akash705/Bulk-Rename-Android" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <section class="hero">
+    <div class="badge">
+      <span class="badge-dot"></span>
+      <span>v1.0.0 · Available now</span>
+    </div>
+    <h1>Rename hundreds of files <span class="grad">in one tap.</span></h1>
+    <p>A powerful bulk file renaming app for Android. Compose rule chains, preview every change, and undo any batch — all on-device.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/akash705/Bulk-Rename-Android/releases/tag/v1.0.0">
+        <span>Download APK</span>
+        <span style="font-family: var(--mono); font-size: 13px;">↓</span>
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/akash705/Bulk-Rename-Android" target="_blank" rel="noopener">
+        <span>View on GitHub</span>
+      </a>
+    </div>
+    <p class="vibe-note">// Vibe-coded. Claude wrote every line. <span class="pink">♥</span></p>
+  </section>
+
+  <section class="section" id="features">
+    <div class="section-eyebrow">Features</div>
+    <h2 class="section-title">Everything you need for batch renames.</h2>
+    <p class="section-sub">From quick prefix swaps to regex-driven cleanups across entire directories.</p>
+
+    <div class="feature-grid">
+      <div class="feature">
+        <div class="feature-icon icon-violet">⌘</div>
+        <h3>File Browser</h3>
+        <p>Navigate the full filesystem. Directories first, then files — alphabetically sorted. Tap to enter, long-press to select.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon icon-pink">◫</div>
+        <h3>Multi-select</h3>
+        <p>Select any number of files and folders. The selection toolbar shows your count and batch actions inline.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon icon-cyan">⛓</div>
+        <h3>Rule Chains</h3>
+        <p>Compose multiple rename rules that apply in sequence. The output of each rule feeds into the next.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon icon-mint">◉</div>
+        <h3>Live Preview</h3>
+        <p>See exactly what every file will become before committing. Conflict indicators flag collisions inside the batch or with existing files.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon icon-amber">▶</div>
+        <h3>Foreground Renaming</h3>
+        <p>Renames run in a Foreground Service so operations survive app backgrounding. A live progress dialog shows per-file status.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon icon-coral">↺</div>
+        <h3>History &amp; Undo</h3>
+        <p>Every batch is journaled to a local Room database. Full-text search across old and new names. One-tap undo per batch.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon icon-multi">⤓</div>
+        <h3>Copy Mode</h3>
+        <p>Create renamed copies and keep originals untouched, or rename in place. Your choice, every batch.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon icon-violet">◊</div>
+        <h3>Privacy First</h3>
+        <p>No analytics. No tracking. No network code. Everything happens on your device — and stays there.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="rules">
+    <div class="section-eyebrow">Rules</div>
+    <h2 class="section-title">Six rules. Infinite combinations.</h2>
+    <p class="section-sub">Stack them in any order to build the rename you want.</p>
+
+    <div class="rules-card">
+      <div class="rule-row">
+        <div class="rule-name">Add Prefix</div>
+        <div class="rule-desc">Prepend text to the filename.</div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-name">Add Suffix</div>
+        <div class="rule-desc">Append text before or after the extension.</div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-name">Set Base Name</div>
+        <div class="rule-desc">Replace the filename, optionally preserving the extension.</div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-name">Replace Text</div>
+        <div class="rule-desc">Find and replace — plain text or full regex, case-sensitive or not.</div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-name">Change Extension</div>
+        <div class="rule-desc">Swap or strip the file extension.</div>
+      </div>
+      <div class="rule-row">
+        <div class="rule-name">Add Numbering</div>
+        <div class="rule-desc">Sequential numbers with configurable start, step, and zero-padding.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="stack">
+    <div class="section-eyebrow">Under the hood</div>
+    <h2 class="section-title">Modern Android, all the way down.</h2>
+    <p class="section-sub">Built with the tools that ship reliable Android apps in 2026.</p>
+
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-label">UI</div>
+        <div class="stack-value">Jetpack Compose</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-label">Design</div>
+        <div class="stack-value">Material 3</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-label">Architecture</div>
+        <div class="stack-value">MVVM + Use Cases</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-label">DI</div>
+        <div class="stack-value">Hilt</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-label">Database</div>
+        <div class="stack-value">Room + FTS</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-label">Async</div>
+        <div class="stack-value">Coroutines</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-label">Background</div>
+        <div class="stack-value">Foreground Service</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-label">Language</div>
+        <div class="stack-value">Kotlin</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="cta-banner">
+    <h2>Ready to rename?</h2>
+    <p>Free, open source, MIT licensed. Available for Android 9+.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/akash705/Bulk-Rename-Android/releases/tag/v1.0.0">
+        Download APK · v1.0.0
+      </a>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-row">
+      <p>© 2026 Bulk Renamer · MIT License</p>
+      <ul class="footer-links">
+        <li><a href="https://github.com/akash705/Bulk-Rename-Android" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="privacy.html">Privacy Policy</a></li>
+        <li><a href="mailto:mishraakash273694@gmail.com">Contact</a></li>
+      </ul>
+    </div>
+  </footer>
+</div>
+
+</body>
+</html>

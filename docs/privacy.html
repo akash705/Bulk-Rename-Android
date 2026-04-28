@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Privacy Policy — Bulk Renamer</title>
+<meta name="description" content="Privacy policy for the Bulk Renamer Android app. The app collects no personal data." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink-deep: #0B0B12;
+    --ink-elevated: #141420;
+    --ink-high: #1C1C2B;
+    --ink-border: #26263A;
+    --violet: #A78BFA;
+    --violet-muted: #7C6BD4;
+    --pink: #F472B6;
+    --cyan: #38BDF8;
+    --mint: #34D399;
+    --text-high: #F5F5FA;
+    --text-mid: #A1A1B5;
+    --text-low: #6C6C85;
+    --display: 'Space Grotesk', system-ui, sans-serif;
+    --body: 'Inter', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--ink-deep);
+    color: var(--text-high);
+    font-family: var(--body);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -300px;
+    left: -200px;
+    width: 700px;
+    height: 700px;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.15), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  nav {
+    padding: 24px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(38, 38, 58, 0.4);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.3px;
+    text-decoration: none;
+    color: var(--text-high);
+  }
+  .logo-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--violet), var(--pink));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--ink-deep);
+    font-size: 16px;
+  }
+  .back-link {
+    color: var(--text-mid);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+  .back-link:hover { color: var(--violet); }
+
+  main {
+    padding: 60px 0 80px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--violet);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(36px, 5vw, 48px);
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -1px;
+    margin-bottom: 12px;
+  }
+  .updated {
+    color: var(--text-low);
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-bottom: 40px;
+  }
+
+  .summary {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.08), rgba(244, 114, 182, 0.05));
+    border: 1px solid var(--ink-border);
+    border-radius: 16px;
+    padding: 24px 28px;
+    margin-bottom: 40px;
+  }
+  .summary strong {
+    color: var(--text-high);
+    font-weight: 600;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    margin-top: 40px;
+    margin-bottom: 14px;
+    color: var(--text-high);
+  }
+
+  p, li {
+    color: var(--text-mid);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  p { margin-bottom: 14px; }
+
+  ul {
+    padding-left: 22px;
+    margin-bottom: 14px;
+  }
+  li { margin-bottom: 8px; }
+  li strong { color: var(--text-high); font-weight: 600; }
+
+  code {
+    font-family: var(--mono);
+    background: var(--ink-high);
+    border: 1px solid var(--ink-border);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--cyan);
+  }
+
+  a {
+    color: var(--violet);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.3);
+    transition: border-color 0.2s;
+  }
+  a:hover { border-color: var(--violet); }
+
+  footer {
+    border-top: 1px solid var(--ink-border);
+    padding: 30px 0;
+    margin-top: 40px;
+    color: var(--text-low);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <nav>
+    <a class="logo" href="index.html">
+      <div class="logo-mark">B</div>
+      <span>Bulk Renamer</span>
+    </a>
+    <a class="back-link" href="index.html">← Back to home</a>
+  </nav>
+
+  <main>
+    <div class="eyebrow">Privacy Policy</div>
+    <h1>Your data stays on your device.</h1>
+    <p class="updated">Last updated: 2026-04-28</p>
+
+    <div class="summary">
+      <strong>The app collects no personal data, sends nothing to any server, and has no analytics, advertising, or tracking.</strong> Everything happens on your device.
+    </div>
+
+    <p>This Privacy Policy describes how the <strong>Bulk Renamer</strong> Android application ("the app", "we") handles information.</p>
+
+    <h2>What the app does</h2>
+    <p>Bulk Renamer is an offline file-management utility. It reads filenames from your device's storage, lets you preview rename operations, and applies those renames locally. A history of past rename operations is stored on your device so you can undo them.</p>
+
+    <h2>Data the app accesses</h2>
+    <p>To do its job, the app accesses the following on your device:</p>
+    <ul>
+      <li><strong>File and folder names</strong>, sizes, and paths — read from the storage you grant access to, in order to display them in the file browser and apply renames.</li>
+      <li><strong>Rename history</strong> — the original and new names of files you have renamed through the app, stored in a local database on your device so you can search past renames and undo them.</li>
+    </ul>
+    <p>This data <strong>never leaves your device</strong>. The app has no network code and makes no network requests.</p>
+
+    <h2>Data the app collects, shares, or sells</h2>
+    <p><strong>None.</strong> The app does not collect, transmit, share, or sell any personal information, file contents, filenames, usage data, device identifiers, crash reports, or analytics.</p>
+
+    <h2>Permissions the app requests</h2>
+    <p>The app requests the following Android permissions, used solely on-device for the purposes described:</p>
+    <ul>
+      <li><strong><code>MANAGE_EXTERNAL_STORAGE</code></strong> (Android 11+) — required to browse and rename files across the device's shared storage. The app uses this access only to list filenames and perform renames you explicitly initiate. It is never used to read file contents or transmit data.</li>
+      <li><strong><code>READ_EXTERNAL_STORAGE</code> / <code>WRITE_EXTERNAL_STORAGE</code></strong> (Android 9 and 10) — legacy equivalents of the above, used for the same purpose on older Android versions.</li>
+      <li><strong><code>FOREGROUND_SERVICE</code></strong> / <strong><code>FOREGROUND_SERVICE_DATA_SYNC</code></strong> — required to keep a rename operation running reliably while the app is in the background, with a visible notification.</li>
+    </ul>
+
+    <h2>Data storage and security</h2>
+    <p>All app data — the rename history database and any preferences — is stored locally on your device using standard Android storage APIs. Uninstalling the app removes this data.</p>
+
+    <h2>Children's privacy</h2>
+    <p>The app does not knowingly collect any data from anyone, including children.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>If this policy changes, the updated version will be published at the same URL. The "Last updated" date above will reflect the most recent change.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about this policy: <a href="mailto:mishraakash273694@gmail.com">mishraakash273694@gmail.com</a></p>
+  </main>
+
+  <footer>
+    © 2026 Bulk Renamer · MIT License
+  </footer>
+</div>
+
+</body>
+</html>

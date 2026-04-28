@@ -7,11 +7,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.parcelize")
 }
 
-fun getKeychainPassword(account: String, service: String): String {
-    return Runtime.getRuntime()
-        .exec(arrayOf("security", "find-generic-password", "-a", account, "-s", service, "-w"))
-        .inputStream.bufferedReader().readLine() ?: ""
-}
+fun keychainPassword(account: String, service: String): Provider<String> =
+    providers.exec {
+        commandLine("security", "find-generic-password", "-a", account, "-s", service, "-w")
+    }.standardOutput.asText.map { it.trim() }
 
 android {
     namespace = "com.bulkrenamer"
@@ -29,10 +28,11 @@ android {
 
     signingConfigs {
         create("release") {
+            val pass = keychainPassword("release-key", "android-release-keystore")
             storeFile = file("${System.getProperty("user.home")}/.android/release.jks")
-            storePassword = getKeychainPassword("release-key", "android-release-keystore")
+            storePassword = pass.get()
             keyAlias = "release-key"
-            keyPassword = getKeychainPassword("release-key", "android-release-keystore")
+            keyPassword = pass.get()
         }
     }
 
